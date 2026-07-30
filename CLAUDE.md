@@ -90,10 +90,38 @@ pegar vazamento acidental.
 
 ## Principais Serviços, Jobs e Models
 
-Vazio — nada implementado. Preenchido a cada slice vertical.
+### `api/internal/parser` — domínio puro, sem I/O
 
-Primeiro model previsto: `Movimentacao` (valor em centavos, tipo, categoria, conta,
-data, descrição).
+`Parse(entrada string) (Lancamento, error)` converte a entrada de uma linha do
+usuário em lançamento estruturado. Cobertura 100%.
+
+```go
+type Lancamento struct {
+    Centavos  int64      // nunca float64
+    Categoria Categoria  // conjunto fechado
+    Tipo      Tipo       // despesa | receita, derivado da categoria
+}
+```
+
+| Arquivo | Responsabilidade |
+|---|---|
+| `parser.go` | `Parse`, tipos `Lancamento`/`Tipo`, checagem do limite de tamanho |
+| `valor.go` | valor em pt-BR → centavos; erros de faixa; `MaxEntrada` |
+| `categoria.go` | conjunto fechado, mapa de termos, normalização, `tipoDe` |
+
+Erros exportados: `ErrSemValor`, `ErrValorInvalido`, `ErrValorNaoPositivo`,
+`ErrEntradaLonga`. Comparar com `errors.Is`, nunca por string.
+
+Comportamentos que são decisão, não acaso — todos com teste:
+
+- Termo desconhecido → `Outros`, nunca erro.
+- `Outros` → `Despesa` (é ambígua; despesa é a maioria esmagadora).
+- Sinal negativo ignorado: `-5 mercado` é despesa de R$ 5,00 (a direção já está
+  em `Tipo`).
+- Mais de duas casas decimais trunca, não arredonda: `42,555` → R$ 42,55.
+
+Ainda não existem: conta, data e descrição no `Lancamento` — entram no slice que
+precisar delas.
 
 ## Design Patterns e Convenções
 
@@ -132,7 +160,8 @@ Entrada do usuário ("120 mercado")
   → Dashboard (saldo, receitas do mês, despesas do mês, economia)
 ```
 
-Hoje só a primeira seta existe como escopo. As demais entram slice a slice.
+A primeira seta está implementada (`api/internal/parser`). As demais entram slice a
+slice — a próxima fronteira é decidir entre persistência local e API HTTP.
 
 ## Segurança — superfícies conhecidas
 
