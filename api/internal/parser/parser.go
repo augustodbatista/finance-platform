@@ -20,13 +20,6 @@ const (
 	Receita Tipo = "receita"
 )
 
-// Categoria e um conjunto fechado, nao texto livre.
-type Categoria string
-
-const (
-	Mercado Categoria = "mercado"
-)
-
 // Lancamento e o resultado estruturado de uma entrada do usuario.
 //
 // Centavos e int64 de proposito: dinheiro em float64 corrompe saldo
@@ -59,7 +52,7 @@ func Parse(entrada string) (Lancamento, error) {
 
 	return Lancamento{
 		Centavos:  reais * 100,
-		Categoria: Mercado,
+		Categoria: classificar(entrada),
 		Tipo:      Despesa,
 	}, nil
 }
