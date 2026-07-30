@@ -1,0 +1,12 @@
+# Allowlist de vulnerabilidades.
+#
+# Toda entrada exige `reason` e `ignoreUntil` (maximo 90 dias). Ignorar sem motivo
+# e sem data de revisao e violacao da regra de CI verde, nao excecao a ela.
+# O procedimento de triagem esta em CLAUDE.md, secao "Triagem de vulnerabilidades".
+#
+# [[IgnoredVulns]]
+# id = "GO-2026-0000"
+# ignoreUntil = 2026-10-28
+# reason = "Sem patch upstream. govulncheck confirma que a funcao vulneravel nao e alcancada por este codigo."
+
+# Nenhuma entrada hoje.

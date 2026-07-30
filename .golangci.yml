@@ -1,0 +1,7 @@
+# O conjunto padrao do golangci-lint (errcheck, govet, ineffassign, staticcheck,
+# unused) ja cobre o essencial. So falta o linter de seguranca: gosec aqui atende
+# o requisito de analise estatica de seguranca para Go sem um job extra no CI.
+version: "2"
+linters:
+  enable:
+    - gosec
