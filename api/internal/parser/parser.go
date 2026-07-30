@@ -6,12 +6,6 @@
 // digita e um lancamento salvo.
 package parser
 
-import (
-	"errors"
-	"regexp"
-	"strconv"
-)
-
 // Tipo distingue entrada de saida de dinheiro.
 type Tipo string
 
@@ -31,27 +25,15 @@ type Lancamento struct {
 	Tipo      Tipo
 }
 
-// ErrSemValor indica que a entrada nao contem um valor monetario reconhecivel.
-var ErrSemValor = errors.New("parser: entrada sem valor monetario")
-
-// reNumero casa uma sequencia de digitos. O regexp do Go e RE2, linear e sem
-// backtracking, entao entrada hostil nao vira ReDoS.
-var reNumero = regexp.MustCompile(`\d+`)
-
 // Parse converte a entrada do usuario em um Lancamento.
 func Parse(entrada string) (Lancamento, error) {
-	numero := reNumero.FindString(entrada)
-	if numero == "" {
-		return Lancamento{}, ErrSemValor
-	}
-
-	reais, err := strconv.ParseInt(numero, 10, 64)
+	centavos, err := extrairCentavos(entrada)
 	if err != nil {
-		return Lancamento{}, ErrSemValor
+		return Lancamento{}, err
 	}
 
 	return Lancamento{
-		Centavos:  reais * 100,
+		Centavos:  centavos,
 		Categoria: classificar(entrada),
 		Tipo:      Despesa,
 	}, nil

@@ -12,6 +12,19 @@ func TestParse_Valor(t *testing.T) {
 		quero   int64
 	}{
 		{"120 mercado", 12000},
+		// Virgula e o separador decimal em pt-BR.
+		{"Almoço 42,50", 4250},
+		// Um decimal so ainda sao centavos: 42,5 = 42 reais e 50 centavos.
+		{"cafe 42,5", 4250},
+		// Ponto e separador de milhar, e os dois convivem.
+		{"R$ 1.234,56", 123456},
+		{"1.234", 123400},
+		// Mais de um numero: vale o ultimo (decisao de produto, 30/07/2026).
+		{"2 cafés 15", 1500},
+		{"3x uber 18", 1800},
+		// Valor antes ou depois da descricao da na mesma coisa.
+		{"Uber 18", 1800},
+		{"18 uber", 1800},
 	}
 
 	for _, c := range casos {
