@@ -172,6 +172,14 @@ Toda pegadinha nova entra aqui **antes** de seguir.
   instalador falha em ambos.
 - **`make` não existe nesta máquina.** Nada de Makefile; comandos crus documentados
   aqui.
+- **`go` não está no PATH do shell do agente.** O binário vive em
+  `C:\Program Files\Go\bin`. Exportar antes de qualquer comando Go:
+  `export PATH="$PATH:/c/Program Files/Go/bin"`.
+- **`go test -race` não roda nesta máquina.** `-race` exige cgo, cgo exige um
+  compilador C, e não há `gcc` aqui. **Local** usa `go test -cover ./...`; o CI
+  mantém `-race` porque o runner Linux tem toolchain C. Não instale MinGW só para
+  isso — a corrida de dados que importa é detectada no CI, e hoje o domínio é puro,
+  sem concorrência.
 - **`core.autocrlf=true` no git global desta máquina.** Sem `.gitattributes`, os
   arquivos ficariam CRLF na árvore local e LF no runner Linux, fazendo `gofmt` e
   `dart format` divergirem entre a sua máquina e o CI — verde local, vermelho no CI,
@@ -198,6 +206,16 @@ Toda pegadinha nova entra aqui **antes** de seguir.
 - **`golangci-lint` v2 mudou o formato do config** (exige `version: "2"`) e pede
   `golangci-lint-action@v8`. Se a primeira execução falhar com erro de parse, é
   incompatibilidade do par action/config — corrigir os dois juntos.
+
+## Comandos locais
+
+Do diretório `api/`, com o PATH já exportado:
+
+```bash
+export PATH="$PATH:/c/Program Files/Go/bin" && cd /c/finance-platform/api && gofmt -l . && go test -cover ./...
+```
+
+Sem `-race` local (ver Common Hurdles). O CI roda `-race` no Linux.
 
 ## Definição de Pronto (checklist pós-implementação)
 
