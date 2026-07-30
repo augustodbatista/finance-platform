@@ -16,8 +16,8 @@ jobs:
       go: ${{ steps.filter.outputs.go }}
       flutter: ${{ steps.filter.outputs.flutter }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -34,14 +34,14 @@ jobs:
       run:
         working-directory: api
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: api/go.mod
       - name: Formatacao
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
       - name: Lint + gosec
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           working-directory: api
       - name: Testes
@@ -59,7 +59,7 @@ jobs:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -73,8 +73,10 @@ jobs:
   deps-audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: google/osv-scanner-action/osv-scanner-action@v2
+      - uses: actions/checkout@v7
+      # Versao exata de proposito: este repo NAO publica tag flutuante de major
+      # (nao existe `v2`), so releases completas. Trocar por `@v2` quebra o job.
+      - uses: google/osv-scanner-action/osv-scanner-action@v2.3.8
         with:
           scan-args: |-
             --recursive
@@ -85,9 +87,10 @@ jobs:
     container:
       image: semgrep/semgrep
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      # p/dart e p/flutter nao existem no registry do semgrep (HTTP 404); a
+      # analise estatica do Dart fica a cargo do `flutter analyze` no job flutter.
       - run: |
           semgrep scan --error --skip-unknown-extensions \
             --config p/golang \
-            --config p/dart \
             --config p/secrets

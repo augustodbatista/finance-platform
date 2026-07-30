@@ -108,6 +108,11 @@ data, descrição).
   Assinaturas, Outros.
   Entrada não reconhecida cai em "Outros", não gera erro — atrito zero é mais
   importante que precisão de categoria.
+- **Entrada com mais de um número: vale o último.** `"2 cafés 15"` → R$ 15,00;
+  `"3x uber 18"` → R$ 18,00. Decisão de produto do Augusto (30/07/2026). Regra de uma
+  linha, compatível com todos os exemplos de uma entrada só (`120 mercado`, `Uber 18`,
+  `Salário 3500`), e que **nunca rejeita nem pergunta** — rejeitar entrada ambígua
+  adicionaria atrito exatamente onde a tese do produto diz que atrito mata hábito.
 - **Domínio puro no centro:** parser e regras de negócio sem I/O, sem banco, sem HTTP.
   Testáveis com `go test` sem infraestrutura.
 - **Integrações externas atrás de interfaces** (mitigação do RFC-0001 para o
@@ -176,6 +181,17 @@ Toda pegadinha nova entra aqui **antes** de seguir.
 - **Módulo Go só com `go.mod` e zero arquivos `.go` reprova no CI.** `golangci-lint`
   aborta com "no go files to analyze". Por isso `api/go.mod` **não** entra sozinho num
   commit de infra: nasce junto com o primeiro `.go` e seu teste.
+- **`google/osv-scanner-action` não publica tag flutuante de major.** Não existe `v2`;
+  só releases completas (`v2.3.8`). O pin tem que ser exato — "simplificar" para `@v2`
+  derruba o job com *"unable to find version"*. É a única action do CI assim; todas as
+  outras (`actions/checkout@v7`, `dorny/paths-filter@v4`, `actions/setup-go@v7`,
+  `golangci/golangci-lint-action@v9`, `golang/govulncheck-action@v1`,
+  `subosito/flutter-action@v2`) têm tag de major.
+- **`p/dart` e `p/flutter` não existem no registry do semgrep** (HTTP 404), e `p/go`
+  também não — o correto é `p/golang`. Um config inválido derruba o scan inteiro com
+  exit 7, não é ignorado. Análise estática do Dart fica por conta do `flutter analyze`.
+- **Actions em Node 20 já emitem aviso de depreciação** no runner. Não quebra hoje,
+  quebra sozinho depois. Manter os pins nas majors atuais.
 - **Os jobs Flutter do CI ficam dormentes até `app/` existir** (o `paths-filter` os
   desliga). É deliberado, não acidente: o primeiro commit em `app/` provavelmente
   acusa problema de config, e esse ajuste faz parte daquele commit.
