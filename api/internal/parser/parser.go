@@ -26,7 +26,14 @@ type Lancamento struct {
 }
 
 // Parse converte a entrada do usuario em um Lancamento.
+//
+// A entrada e string livre vinda do usuario, entao o teto de tamanho e checado
+// antes de qualquer trabalho: e a fronteira de confianca do dominio.
 func Parse(entrada string) (Lancamento, error) {
+	if len(entrada) > MaxEntrada {
+		return Lancamento{}, ErrEntradaLonga
+	}
+
 	centavos, err := extrairCentavos(entrada)
 	if err != nil {
 		return Lancamento{}, err
