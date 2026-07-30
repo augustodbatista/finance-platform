@@ -167,6 +167,12 @@ Toda pegadinha nova entra aqui **antes** de seguir.
   instalador falha em ambos.
 - **`make` não existe nesta máquina.** Nada de Makefile; comandos crus documentados
   aqui.
+- **`core.autocrlf=true` no git global desta máquina.** Sem `.gitattributes`, os
+  arquivos ficariam CRLF na árvore local e LF no runner Linux, fazendo `gofmt` e
+  `dart format` divergirem entre a sua máquina e o CI — verde local, vermelho no CI,
+  sem diferença visível no diff. Resolvido por `* text=auto eol=lf` no
+  `.gitattributes`. **Não** rode `git config core.autocrlf` para "consertar" nada:
+  o `.gitattributes` tem precedência e é versionado, a config global não.
 - **Módulo Go só com `go.mod` e zero arquivos `.go` reprova no CI.** `golangci-lint`
   aborta com "no go files to analyze". Por isso `api/go.mod` **não** entra sozinho num
   commit de infra: nasce junto com o primeiro `.go` e seu teste.
