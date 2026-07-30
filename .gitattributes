@@ -1,0 +1,6 @@
+# Normaliza fim de linha para LF no repositorio E na arvore de trabalho.
+#
+# Sem isto, com core.autocrlf=true no Windows, os arquivos ficam CRLF localmente
+# e LF no runner Linux. gofmt e dart format passariam a divergir entre a maquina
+# do dev e o CI, produzindo o pior tipo de falha: verde local, vermelho no CI.
+* text=auto eol=lf
