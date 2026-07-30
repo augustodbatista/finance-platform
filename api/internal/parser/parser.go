@@ -32,9 +32,11 @@ func Parse(entrada string) (Lancamento, error) {
 		return Lancamento{}, err
 	}
 
+	categoria := classificar(entrada)
+
 	return Lancamento{
 		Centavos:  centavos,
-		Categoria: classificar(entrada),
-		Tipo:      Despesa,
+		Categoria: categoria,
+		Tipo:      tipoDe(categoria),
 	}, nil
 }

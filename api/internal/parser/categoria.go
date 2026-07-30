@@ -136,3 +136,23 @@ func classificar(entrada string) Categoria {
 	}
 	return Outros
 }
+
+// receitas sao as categorias que representam dinheiro entrando.
+var receitas = map[Categoria]bool{
+	Salario:       true,
+	Freelancer:    true,
+	Investimentos: true,
+}
+
+// tipoDe deriva receita ou despesa da categoria, para que o usuario nao precise
+// declarar: quem digita "salario 3500" ja disse tudo o que era preciso.
+//
+// Outros cai em Despesa. E ambigua por definicao (existe nas duas listas), e a
+// esmagadora maioria dos lancamentos e saida de dinheiro -- o padrao que erra
+// menos vezes.
+func tipoDe(c Categoria) Tipo {
+	if receitas[c] {
+		return Receita
+	}
+	return Despesa
+}

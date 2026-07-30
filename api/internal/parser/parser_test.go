@@ -73,11 +73,53 @@ func TestParse_Categoria(t *testing.T) {
 }
 
 func TestParse_Tipo(t *testing.T) {
-	got, err := parser.Parse("120 mercado")
-	if err != nil {
-		t.Fatalf("Parse retornou erro inesperado: %v", err)
+	casos := []struct {
+		entrada string
+		quero   parser.Tipo
+	}{
+		{"120 mercado", parser.Despesa},
+		{"Uber 18", parser.Despesa},
+		// Categoria de receita define o tipo; o usuario nao precisa dizer.
+		{"Salário 3500", parser.Receita},
+		{"freela 800", parser.Receita},
+		{"dividendo 120", parser.Receita},
+		// Outros e ambigua por natureza: sem sinal de receita, e despesa,
+		// que e a esmagadora maioria dos lancamentos.
+		{"xyzabc 30", parser.Despesa},
 	}
-	if got.Tipo != parser.Despesa {
-		t.Errorf("Tipo = %q, quero %q", got.Tipo, parser.Despesa)
+
+	for _, c := range casos {
+		t.Run(c.entrada, func(t *testing.T) {
+			got, err := parser.Parse(c.entrada)
+			if err != nil {
+				t.Fatalf("Parse(%q) retornou erro inesperado: %v", c.entrada, err)
+			}
+			if got.Tipo != c.quero {
+				t.Errorf("Tipo = %q, quero %q", got.Tipo, c.quero)
+			}
+		})
+	}
+}
+
+func TestParse_CategoriaReceita(t *testing.T) {
+	casos := []struct {
+		entrada string
+		quero   parser.Categoria
+	}{
+		{"Salário 3500", parser.Salario},
+		{"freela 800", parser.Freelancer},
+		{"dividendo 120", parser.Investimentos},
+	}
+
+	for _, c := range casos {
+		t.Run(c.entrada, func(t *testing.T) {
+			got, err := parser.Parse(c.entrada)
+			if err != nil {
+				t.Fatalf("Parse(%q) retornou erro inesperado: %v", c.entrada, err)
+			}
+			if got.Categoria != c.quero {
+				t.Errorf("Categoria = %q, quero %q", got.Categoria, c.quero)
+			}
+		})
 	}
 }
