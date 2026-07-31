@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/augustodbatista/finance-platform/api/internal/fatura"
 	"github.com/augustodbatista/finance-platform/api/internal/parser"
 )
 
@@ -220,7 +221,7 @@ func TestParse_ParcelasInvalidas(t *testing.T) {
 	for _, entrada := range casos {
 		t.Run(entrada, func(t *testing.T) {
 			_, err := parser.Parse(entrada, agora)
-			if !errors.Is(err, parser.ErrParcelasInvalidas) {
+			if !errors.Is(err, fatura.ErrParcelasInvalidas) {
 				t.Errorf("Parse(%.30q) erro = %v, quero ErrParcelasInvalidas", entrada, err)
 			}
 		})

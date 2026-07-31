@@ -1,22 +1,12 @@
 package parser
 
 import (
-	"errors"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/augustodbatista/finance-platform/api/internal/fatura"
 )
-
-// ErrParcelasInvalidas indica numero de parcelas zero, negativo ou acima do teto.
-var ErrParcelasInvalidas = errors.New("parser: numero de parcelas invalido")
-
-// MaxParcelas e o teto de parcelas aceitas.
-//
-// Nao e preciosismo: fatura.Dividir aloca um slice de tamanho N vindo direto da
-// entrada do usuario, entao "999999999x 100" sem teto seria alocacao de bilhoes
-// de itens a partir de uma linha de texto. Teto pequeno mata o vetor, e 99
-// parcelas ja passa de qualquer plano que um emissor brasileiro oferece.
-const MaxParcelas = 99
 
 // reParcelas casa "3x", "3 x" e "12x1200".
 //
@@ -34,6 +24,10 @@ var reParcelas = regexp.MustCompile(`\b(\d+)\s*x`)
 // ultimo numero" faria "300 mercado 3x" virar R$ 3,00 se o token continuasse
 // na string na hora de extrair o valor.
 //
+// O teto e o erro vem de fatura, e nao daqui: quantas parcelas um cartao
+// aceita e regra de cartao, nao de texto. Duplicar o limite nos dois pacotes
+// seria duas verdades sobre a mesma coisa, prontas para divergir.
+//
 // Espera a entrada ja normalizada (ver normalizar).
 func extrairParcelas(entrada string) (int, string, error) {
 	m := reParcelas.FindStringSubmatch(entrada)
@@ -44,8 +38,8 @@ func extrairParcelas(entrada string) (int, string, error) {
 	// Atoi tambem falha por estouro, e nao so por texto invalido: um numero de
 	// 23 digitos cai aqui em vez de virar lixo silencioso.
 	parcelas, err := strconv.Atoi(m[1])
-	if err != nil || parcelas < 1 || parcelas > MaxParcelas {
-		return 0, "", ErrParcelasInvalidas
+	if err != nil || parcelas < 1 || parcelas > fatura.MaxParcelas {
+		return 0, "", fatura.ErrParcelasInvalidas
 	}
 
 	return parcelas, strings.Replace(entrada, m[0], " ", 1), nil
