@@ -121,15 +121,21 @@ var semAcento = strings.NewReplacer(
 	"ç", "c", "ñ", "n",
 )
 
-// normalizar deixa o texto comparavel com as chaves de termos.
+// normalizar deixa o texto comparavel com as chaves de termos e com os padroes
+// de palavra do pacote. Parse chama uma vez, no inicio, e todo o resto do
+// pipeline trabalha sobre o resultado -- normalizar em dois lugares diferentes
+// era o que fazia a string intermediaria sair ora original, ora normalizada,
+// dependendo do caminho tomado.
 func normalizar(s string) string {
 	return semAcento.Replace(strings.ToLower(s))
 }
 
 // classificar devolve a categoria da primeira palavra reconhecida da entrada.
 // Nenhuma palavra reconhecida devolve Outros, nunca erro.
+//
+// Espera a entrada ja normalizada (ver normalizar).
 func classificar(entrada string) Categoria {
-	for _, palavra := range strings.Fields(normalizar(entrada)) {
+	for _, palavra := range strings.Fields(entrada) {
 		if c, ok := termos[palavra]; ok {
 			return c
 		}

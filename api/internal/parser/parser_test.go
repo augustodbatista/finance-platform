@@ -4,9 +4,107 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/augustodbatista/finance-platform/api/internal/parser"
 )
+
+// agora e o relogio fixo dos testes. Parse recebe o relogio em vez de chamar
+// time.Now() por dentro: senao "ontem" mudaria de valor conforme o dia em que o
+// teste rodasse, e um teste que depende do calendario nao e teste.
+var agora = time.Date(2026, time.July, 30, 14, 30, 0, 0, time.UTC)
+
+func TestParse_Data(t *testing.T) {
+	casos := []struct {
+		nome    string
+		entrada string
+		relogio time.Time
+		quero   time.Time
+	}{
+		{"sem mencao e hoje", "mercado 120", agora,
+			time.Date(2026, time.July, 30, 0, 0, 0, 0, time.UTC)},
+		{"hoje explicito", "mercado 120 hoje", agora,
+			time.Date(2026, time.July, 30, 0, 0, 0, 0, time.UTC)},
+		{"ontem", "mercado 120 ontem", agora,
+			time.Date(2026, time.July, 29, 0, 0, 0, 0, time.UTC)},
+		{"ontem em caixa alta", "mercado 120 ONTEM", agora,
+			time.Date(2026, time.July, 29, 0, 0, 0, 0, time.UTC)},
+		{"dd/mm", "mercado 120 15/03", agora,
+			time.Date(2026, time.March, 15, 0, 0, 0, 0, time.UTC)},
+		{"dd/mm/aaaa", "mercado 120 15/03/2024", agora,
+			time.Date(2024, time.March, 15, 0, 0, 0, 0, time.UTC)},
+		{"dd/mm/aa", "mercado 120 15/03/25", agora,
+			time.Date(2025, time.March, 15, 0, 0, 0, 0, time.UTC)},
+		// dd/mm sem ano resolve para a ocorrencia passada mais recente:
+		// lancamento atrasado e comum, lancamento futuro nao.
+		{"dd/mm que ainda nao chegou neste ano", "mercado 120 20/12",
+			time.Date(2026, time.January, 15, 9, 0, 0, 0, time.UTC),
+			time.Date(2025, time.December, 20, 0, 0, 0, 0, time.UTC)},
+		// Ontem atravessando a virada do mes.
+		{"ontem no dia 1", "mercado 120 ontem",
+			time.Date(2026, time.March, 1, 8, 0, 0, 0, time.UTC),
+			time.Date(2026, time.February, 28, 0, 0, 0, 0, time.UTC)},
+	}
+
+	for _, c := range casos {
+		t.Run(c.nome, func(t *testing.T) {
+			got, err := parser.Parse(c.entrada, c.relogio)
+			if err != nil {
+				t.Fatalf("Parse(%q) retornou erro inesperado: %v", c.entrada, err)
+			}
+			if !got.Data.Equal(c.quero) {
+				t.Errorf("Data = %s, quero %s",
+					got.Data.Format(time.RFC3339), c.quero.Format(time.RFC3339))
+			}
+		})
+	}
+}
+
+// A regra "vale o ultimo numero" colide com a data: sem remover o token antes
+// de extrair o valor, "mercado 120 15/03" viraria R$ 0,03. Erro silencioso
+// sobre dinheiro e o modo de falha que este projeto trata como inaceitavel.
+func TestParse_DataNaoRoubaOValor(t *testing.T) {
+	casos := []struct {
+		entrada string
+		quero   int64
+	}{
+		{"mercado 120 15/03", 12000},
+		{"mercado 120 15/03/2024", 12000},
+		{"mercado 120 15/03/25", 12000},
+		{"15/03 mercado 120", 12000},
+		{"mercado 120 ontem", 12000},
+		{"ontem mercado 42,50", 4250},
+	}
+
+	for _, c := range casos {
+		t.Run(c.entrada, func(t *testing.T) {
+			got, err := parser.Parse(c.entrada, agora)
+			if err != nil {
+				t.Fatalf("Parse(%q) retornou erro inesperado: %v", c.entrada, err)
+			}
+			if got.Centavos != c.quero {
+				t.Errorf("Centavos = %d, quero %d", got.Centavos, c.quero)
+			}
+		})
+	}
+}
+
+func TestParse_DataInvalida(t *testing.T) {
+	casos := []string{
+		"mercado 120 30/02",
+		"mercado 120 31/04",
+		"mercado 120 15/13",
+		"mercado 120 00/01",
+	}
+
+	for _, entrada := range casos {
+		t.Run(entrada, func(t *testing.T) {
+			if _, err := parser.Parse(entrada, agora); !errors.Is(err, parser.ErrDataInvalida) {
+				t.Errorf("Parse(%q) erro = %v, quero ErrDataInvalida", entrada, err)
+			}
+		})
+	}
+}
 
 func TestParse_Erros(t *testing.T) {
 	casos := []struct {
@@ -31,7 +129,7 @@ func TestParse_Erros(t *testing.T) {
 
 	for _, c := range casos {
 		t.Run(c.nome, func(t *testing.T) {
-			_, err := parser.Parse(c.entrada)
+			_, err := parser.Parse(c.entrada, agora)
 			if !errors.Is(err, c.quero) {
 				t.Errorf("Parse(%.30q) erro = %v, quero %v", c.entrada, err, c.quero)
 			}
@@ -42,13 +140,13 @@ func TestParse_Erros(t *testing.T) {
 func TestParse_LimiteDeTamanho(t *testing.T) {
 	// Exatamente no limite tem que passar; um caractere alem, nao.
 	noLimite := strings.Repeat("a", parser.MaxEntrada-3) + " 10"
-	if _, err := parser.Parse(noLimite); err != nil {
+	if _, err := parser.Parse(noLimite, agora); err != nil {
 		t.Errorf("entrada de %d chars (limite %d) devia passar, deu %v",
 			len(noLimite), parser.MaxEntrada, err)
 	}
 
 	alem := strings.Repeat("a", parser.MaxEntrada) + " 10"
-	if _, err := parser.Parse(alem); !errors.Is(err, parser.ErrEntradaLonga) {
+	if _, err := parser.Parse(alem, agora); !errors.Is(err, parser.ErrEntradaLonga) {
 		t.Errorf("entrada de %d chars devia dar ErrEntradaLonga, deu %v", len(alem), err)
 	}
 }
@@ -56,7 +154,7 @@ func TestParse_LimiteDeTamanho(t *testing.T) {
 func TestParse_SinalNegativoEIgnorado(t *testing.T) {
 	// O sinal e redundante: a direcao do dinheiro ja esta em Tipo. Entao
 	// "-5 mercado" e uma despesa de R$ 5,00, nao um erro nem um valor negativo.
-	got, err := parser.Parse("-5 mercado")
+	got, err := parser.Parse("-5 mercado", agora)
 	if err != nil {
 		t.Fatalf("Parse retornou erro inesperado: %v", err)
 	}
@@ -94,7 +192,7 @@ func TestParse_Valor(t *testing.T) {
 
 	for _, c := range casos {
 		t.Run(c.entrada, func(t *testing.T) {
-			got, err := parser.Parse(c.entrada)
+			got, err := parser.Parse(c.entrada, agora)
 			if err != nil {
 				t.Fatalf("Parse(%q) retornou erro inesperado: %v", c.entrada, err)
 			}
@@ -126,7 +224,7 @@ func TestParse_Categoria(t *testing.T) {
 
 	for _, c := range casos {
 		t.Run(c.entrada, func(t *testing.T) {
-			got, err := parser.Parse(c.entrada)
+			got, err := parser.Parse(c.entrada, agora)
 			if err != nil {
 				t.Fatalf("Parse(%q) retornou erro inesperado: %v", c.entrada, err)
 			}
@@ -155,7 +253,7 @@ func TestParse_Tipo(t *testing.T) {
 
 	for _, c := range casos {
 		t.Run(c.entrada, func(t *testing.T) {
-			got, err := parser.Parse(c.entrada)
+			got, err := parser.Parse(c.entrada, agora)
 			if err != nil {
 				t.Fatalf("Parse(%q) retornou erro inesperado: %v", c.entrada, err)
 			}
@@ -178,7 +276,7 @@ func TestParse_CategoriaReceita(t *testing.T) {
 
 	for _, c := range casos {
 		t.Run(c.entrada, func(t *testing.T) {
-			got, err := parser.Parse(c.entrada)
+			got, err := parser.Parse(c.entrada, agora)
 			if err != nil {
 				t.Fatalf("Parse(%q) retornou erro inesperado: %v", c.entrada, err)
 			}
