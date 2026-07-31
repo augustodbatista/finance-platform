@@ -30,6 +30,10 @@ type Lancamento struct {
 	Data time.Time
 	// Forma fica vazia quando o usuario nao disse. Ver FormaNaoInformada.
 	Forma FormaPagamento
+	// Parcelas e 1 para compra a vista. Centavos continua sendo o TOTAL; quem
+	// reparte em parcelas e quem sabe a data de fechamento do cartao, no
+	// pacote fatura.
+	Parcelas int
 }
 
 // Parse converte a entrada do usuario em um Lancamento.
@@ -56,6 +60,11 @@ func Parse(entrada string, agora time.Time) (Lancamento, error) {
 		return Lancamento{}, err
 	}
 
+	parcelas, resto, err := extrairParcelas(resto)
+	if err != nil {
+		return Lancamento{}, err
+	}
+
 	centavos, err := extrairCentavos(resto)
 	if err != nil {
 		return Lancamento{}, err
@@ -63,11 +72,20 @@ func Parse(entrada string, agora time.Time) (Lancamento, error) {
 
 	categoria := classificar(resto)
 
+	// Inferencia preenche lacuna, nao sobrescreve o usuario: so cartao de
+	// credito parcela, mas quem digitou outra forma merece ser corrigido na
+	// tela, nao contrariado em silencio aqui.
+	forma := formaDe(resto)
+	if parcelas > 1 && forma == FormaNaoInformada {
+		forma = Credito
+	}
+
 	return Lancamento{
 		Centavos:  centavos,
 		Categoria: categoria,
 		Tipo:      tipoDe(categoria),
 		Data:      data,
-		Forma:     formaDe(resto),
+		Forma:     forma,
+		Parcelas:  parcelas,
 	}, nil
 }

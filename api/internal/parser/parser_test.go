@@ -154,6 +154,79 @@ func TestParse_FormaNaoAtrapalhaOResto(t *testing.T) {
 	}
 }
 
+func TestParse_Parcelas(t *testing.T) {
+	casos := []struct {
+		entrada       string
+		queroParcelas int
+		queroCentavos int64
+	}{
+		// O numero digitado e o TOTAL da compra; a divisao e do sistema.
+		{"3x 300 mercado", 3, 30000},
+		// A armadilha: sem remover o token, "vale o ultimo numero" pegaria o
+		// 3 do "3x" e o lancamento viraria R$ 3,00.
+		{"300 mercado 3x", 3, 30000},
+		{"mercado 3x 300", 3, 30000},
+		{"12x 1200 tv", 12, 120000},
+		{"3 x 300 mercado", 3, 30000},
+		// A vista e uma parcela, nao zero: assim somar parcelas sempre funciona.
+		{"mercado 120", 1, 12000},
+		{"1x 100 mercado", 1, 10000},
+	}
+
+	for _, c := range casos {
+		t.Run(c.entrada, func(t *testing.T) {
+			got, err := parser.Parse(c.entrada, agora)
+			if err != nil {
+				t.Fatalf("Parse(%q) retornou erro inesperado: %v", c.entrada, err)
+			}
+			if got.Parcelas != c.queroParcelas {
+				t.Errorf("Parcelas = %d, quero %d", got.Parcelas, c.queroParcelas)
+			}
+			if got.Centavos != c.queroCentavos {
+				t.Errorf("Centavos = %d, quero %d", got.Centavos, c.queroCentavos)
+			}
+		})
+	}
+}
+
+func TestParse_ParcelamentoImplicaCredito(t *testing.T) {
+	got, err := parser.Parse("3x 300 mercado", agora)
+	if err != nil {
+		t.Fatalf("Parse retornou erro inesperado: %v", err)
+	}
+	if got.Forma != parser.Credito {
+		t.Errorf("Forma = %q, quero %q: so cartao de credito parcela", got.Forma, parser.Credito)
+	}
+
+	// Inferencia preenche lacuna, nao sobrescreve o usuario. Parcelar no
+	// debito nao existe, mas quem digitou "debito" merece ser respeitado e
+	// corrigido na tela -- nao contrariado em silencio pelo parser.
+	got, err = parser.Parse("3x 300 mercado debito", agora)
+	if err != nil {
+		t.Fatalf("Parse retornou erro inesperado: %v", err)
+	}
+	if got.Forma != parser.Debito {
+		t.Errorf("Forma = %q, quero %q", got.Forma, parser.Debito)
+	}
+}
+
+func TestParse_ParcelasInvalidas(t *testing.T) {
+	casos := []string{
+		"0x 100 mercado",
+		"150x 100 mercado",
+		"99999999999999999999999x 100 mercado",
+	}
+
+	for _, entrada := range casos {
+		t.Run(entrada, func(t *testing.T) {
+			_, err := parser.Parse(entrada, agora)
+			if !errors.Is(err, parser.ErrParcelasInvalidas) {
+				t.Errorf("Parse(%.30q) erro = %v, quero ErrParcelasInvalidas", entrada, err)
+			}
+		})
+	}
+}
+
 func TestParse_Erros(t *testing.T) {
 	casos := []struct {
 		nome    string
