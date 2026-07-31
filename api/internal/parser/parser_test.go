@@ -106,6 +106,54 @@ func TestParse_DataInvalida(t *testing.T) {
 	}
 }
 
+func TestParse_FormaPagamento(t *testing.T) {
+	casos := []struct {
+		entrada string
+		quero   parser.FormaPagamento
+	}{
+		{"mercado 120 pix", parser.Pix},
+		{"mercado 120 dinheiro", parser.Dinheiro},
+		{"mercado 120 débito", parser.Debito},
+		{"mercado 120 debito", parser.Debito},
+		{"mercado 120 crédito", parser.Credito},
+		// "cartao" sozinho e ambiguo; credito e a leitura majoritaria, mesma
+		// logica de Outros -> Despesa: escolher em vez de perguntar.
+		{"mercado 120 cartão", parser.Credito},
+		// Sem mencao, o parser nao inventa: quem aplica o padrao do usuario e
+		// a camada que conhece configuracao de usuario, nao o dominio puro.
+		{"mercado 120", parser.FormaNaoInformada},
+	}
+
+	for _, c := range casos {
+		t.Run(c.entrada, func(t *testing.T) {
+			got, err := parser.Parse(c.entrada, agora)
+			if err != nil {
+				t.Fatalf("Parse(%q) retornou erro inesperado: %v", c.entrada, err)
+			}
+			if got.Forma != c.quero {
+				t.Errorf("Forma = %q, quero %q", got.Forma, c.quero)
+			}
+		})
+	}
+}
+
+// A forma de pagamento nao pode sequestrar a categoria nem o valor.
+func TestParse_FormaNaoAtrapalhaOResto(t *testing.T) {
+	got, err := parser.Parse("mercado 120 no débito", agora)
+	if err != nil {
+		t.Fatalf("Parse retornou erro inesperado: %v", err)
+	}
+	if got.Centavos != 12000 {
+		t.Errorf("Centavos = %d, quero 12000", got.Centavos)
+	}
+	if got.Categoria != parser.Mercado {
+		t.Errorf("Categoria = %q, quero %q", got.Categoria, parser.Mercado)
+	}
+	if got.Forma != parser.Debito {
+		t.Errorf("Forma = %q, quero %q", got.Forma, parser.Debito)
+	}
+}
+
 func TestParse_Erros(t *testing.T) {
 	casos := []struct {
 		nome    string

@@ -28,6 +28,8 @@ type Lancamento struct {
 	// Data e a data da compra, nao a do registro: quem lanca "ontem" quer que
 	// o gasto conte no dia em que aconteceu.
 	Data time.Time
+	// Forma fica vazia quando o usuario nao disse. Ver FormaNaoInformada.
+	Forma FormaPagamento
 }
 
 // Parse converte a entrada do usuario em um Lancamento.
@@ -66,5 +68,6 @@ func Parse(entrada string, agora time.Time) (Lancamento, error) {
 		Categoria: categoria,
 		Tipo:      tipoDe(categoria),
 		Data:      data,
+		Forma:     formaDe(resto),
 	}, nil
 }
