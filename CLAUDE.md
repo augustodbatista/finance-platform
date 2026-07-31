@@ -97,31 +97,93 @@ usuário em lançamento estruturado. Cobertura 100%.
 
 ```go
 type Lancamento struct {
-    Centavos  int64      // nunca float64
-    Categoria Categoria  // conjunto fechado
-    Tipo      Tipo       // despesa | receita, derivado da categoria
+    Centavos  int64          // TOTAL da compra, nunca float64
+    Categoria Categoria      // conjunto fechado
+    Tipo      Tipo           // despesa | receita, derivado da categoria
+    Data      time.Time      // data da compra, truncada na meia-noite
+    Forma     FormaPagamento // "" quando o usuário não disse
+    Parcelas  int            // 1 para à vista
 }
 ```
 
+`Parse` recebe o relógio como parâmetro. Nunca chamar `time.Now()` dentro do
+domínio: destrói a pureza e faz o teste de `"ontem"` depender do calendário.
+
 | Arquivo | Responsabilidade |
 |---|---|
-| `parser.go` | `Parse`, tipos `Lancamento`/`Tipo`, checagem do limite de tamanho |
+| `parser.go` | `Parse`, `Lancamento`, `Tipo`, limite de tamanho, **ordem do pipeline** |
 | `valor.go` | valor em pt-BR → centavos; erros de faixa; `MaxEntrada` |
-| `categoria.go` | conjunto fechado, mapa de termos, normalização, `tipoDe` |
+| `categoria.go` | conjunto fechado, mapa de termos, `normalizar`, `tipoDe` |
+| `data.go` | `hoje`/`ontem`/`dd/mm[/aa[aa]]`; `ErrDataInvalida` |
+| `pagamento.go` | `FormaPagamento` e mapa de termos |
+| `parcela.go` | token `Nx`; delega teto e erro para `fatura` |
+
+**A ordem do pipeline em `Parse` é regra, não estilo.** Tokens que contêm
+dígitos mas não são dinheiro — data e parcela — saem da string **antes** da
+extração do valor. Sem isso, a regra "vale o último número" pega o pedaço errado
+e o app guarda valor errado **sem falhar e sem avisar**:
+
+| Entrada | Sem a remoção | Correto |
+|---|---|---|
+| `"mercado 120 15/03"` | R$ 0,03 | R$ 120,00 |
+| `"mercado 120 15/03/2026"` | R$ 20,26 | R$ 120,00 |
+| `"300 mercado 3x"` | R$ 3,00 | R$ 300,00 em 3x |
+
+Todo token novo que contenha dígito entra nessa fila de remoção, com teste.
+
+A normalização (`normalizar`) roda **uma vez**, no início do `Parse`. Todo o
+resto do pipeline espera a string já normalizada.
 
 Erros exportados: `ErrSemValor`, `ErrValorInvalido`, `ErrValorNaoPositivo`,
-`ErrEntradaLonga`. Comparar com `errors.Is`, nunca por string.
+`ErrEntradaLonga`, `ErrDataInvalida`. Comparar com `errors.Is`, nunca por string.
 
 Comportamentos que são decisão, não acaso — todos com teste:
 
 - Termo desconhecido → `Outros`, nunca erro.
 - `Outros` → `Despesa` (é ambígua; despesa é a maioria esmagadora).
-- Sinal negativo ignorado: `-5 mercado` é despesa de R$ 5,00 (a direção já está
-  em `Tipo`).
+- `"cartao"` sozinho → `Credito` (quem paga no débito costuma dizer "débito").
+- Forma ausente → `FormaNaoInformada`. O parser relata o que achou; aplicar o
+  padrão do usuário é da camada que conhece configuração de usuário.
+- `Parcelas > 1` infere `Credito` **só quando a forma não foi dita** — inferência
+  preenche lacuna, não sobrescreve o usuário.
+- Sinal negativo ignorado: `-5 mercado` é despesa de R$ 5,00.
 - Mais de duas casas decimais trunca, não arredonda: `42,555` → R$ 42,55.
+- `dd/mm` sem ano → ocorrência passada mais recente (lançar atrasado é rotina,
+  lançar no futuro quase sempre é engano).
 
-Ainda não existem: conta, data e descrição no `Lancamento` — entram no slice que
+Ainda não existem: conta e descrição no `Lancamento` — entram no slice que
 precisar delas.
+
+### `api/internal/fatura` — domínio puro, sem I/O
+
+Calendário e divisão de dinheiro não são análise de texto. Trabalha só com
+primitivos e **não importa `parser`** (a dependência é `parser → fatura`).
+Cobertura 100%.
+
+```go
+type Competencia struct { Ano int; Mes time.Month }  // sem dia, de propósito
+func De(compra time.Time, diaFechamento int) (Competencia, error)
+func Dividir(total int64, parcelas int, compra time.Time, diaFechamento int) ([]Parcela, error)
+```
+
+- **Compra no próprio dia do fechamento vai para a fatura seguinte.** Decisão do
+  Augusto (30/07/2026); varia por emissor, então conferir contra uma fatura real.
+- `Competencia` não tem dia porque fatura é balde mensal — somar meses num par
+  (ano, mês) elimina de graça o "31 de janeiro + 1 mês".
+- A comparação é por número do dia, sem ajustar ao tamanho do mês. Cartão que
+  fecha dia 31 resolve sozinho: em fevereiro todo dia é < 31.
+- Sobra da divisão vai na **primeira** parcela. A soma das parcelas sempre fecha
+  com o total — testado como invariante, não como exemplo.
+- `MaxParcelas` e `ErrParcelasInvalidas` moram **aqui**, não no parser: é onde o
+  slice de tamanho N é alocado, e quantas parcelas um cartão aceita é regra de
+  cartão, não de texto.
+
+O dia de fechamento é parâmetro, não entidade `Cartao` — sem persistência ele não
+teria onde ser guardado. A entidade nasce com o banco.
+
+**Consequência para o dashboard:** "Despesas do mês" passa a significar "parcelas
+com competência neste mês", não "compras feitas neste mês". São dois números
+diferentes.
 
 ## Design Patterns e Convenções
 
