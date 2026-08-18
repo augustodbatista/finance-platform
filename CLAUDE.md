@@ -185,6 +185,34 @@ teria onde ser guardado. A entidade nasce com o banco.
 com competência neste mês", não "compras feitas neste mês". São dois números
 diferentes.
 
+### `api/internal/resumo` — domínio puro, sem I/O
+
+`Mensal(mes, lancamentos, diaFechamento) (Resumo, error)` produz os números do
+dashboard. Depende de `parser` e `fatura`; ninguém depende dele. Cobertura 100%.
+
+A regra que justifica o pacote não é a soma, é a distinção entre dois números que
+parecem o mesmo:
+
+| Lançamento | Pesa em |
+|---|---|
+| Receita | mês da `Data` — ignora fatura e parcelas (cartão é forma de gastar, não de receber) |
+| Despesa à vista (débito, pix, dinheiro, **não informada**) | mês da `Data` |
+| Despesa no crédito | competência de **cada parcela** |
+
+`FormaNaoInformada` conta no mês da data: o parser não inventa forma, e tratar o
+desconhecido como crédito adiaria dinheiro que talvez já tenha saído.
+
+`Economia` fica negativa em mês que só tem fatura para pagar — isso é informação,
+não erro.
+
+**Ainda não existe `Saldo atual`.** Exige saldo inicial e o pagamento da fatura
+modelado como lançamento; nenhum dos dois existe. Entra no slice que trouxer
+conta e pagamento de fatura.
+
+**Dívida conhecida:** `Lancamento` mora em `parser`, então `resumo` importa o
+pacote de texto só pelo tipo. Move para um pacote de domínio próprio no dia em
+que um terceiro consumidor aparecer — hoje seria renomeação sem contrapartida.
+
 ## Design Patterns e Convenções
 
 - **Dinheiro é `int64` em centavos. Nunca `float64`.** `0.1 + 0.2 != 0.3` em ponto
@@ -222,8 +250,11 @@ Entrada do usuário ("120 mercado")
   → Dashboard (saldo, receitas do mês, despesas do mês, economia)
 ```
 
-A primeira seta está implementada (`api/internal/parser`). As demais entram slice a
-slice — a próxima fronteira é decidir entre persistência local e API HTTP.
+Implementadas: parser, e o dashboard como cálculo puro (`api/internal/resumo`,
+alimentado por `api/internal/fatura`). Falta tudo que tem I/O — persistência,
+sync, API. **A próxima fronteira exige uma decisão que ainda não foi tomada:**
+começar pela persistência local (Flutter + Drift, em `app/`) ou pela API Go
+(`api/`, com Postgres). Os dois destravam o mesmo domínio, que já está pronto.
 
 ## Segurança — superfícies conhecidas
 
