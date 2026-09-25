@@ -1,13 +1,14 @@
-// Package fatura responde em qual fatura de cartao uma compra cai, e reparte
-// uma compra parcelada entre faturas.
+// Package fatura answers which credit card statement ("fatura") a purchase
+// lands on, and splits an installment purchase across statements.
 //
-// E dominio puro: sem I/O, sem banco, sem rede. Trabalha so com primitivos e
-// nao importa o pacote parser -- calendario e divisao de dinheiro nao sao
-// analise de texto, e juntar as duas coisas faria o nome de um dos dois mentir.
+// Pure domain: no I/O, no database, no network. It works only with primitives
+// and does not import package parser -- calendar math and splitting money are
+// not text analysis, and merging the two would make one of the package names
+// lie.
 //
-// O dia de fechamento entra como parametro em vez de sair de uma entidade
-// Cartao porque cartao ainda nao existe: sem persistencia, ele nao teria onde
-// ser guardado. A entidade nasce junto com o banco.
+// The closing day is a parameter rather than a field of a Card entity because
+// cards do not exist yet: without persistence there would be nowhere to store
+// them. The entity arrives together with the database.
 package fatura
 
 import (
@@ -15,37 +16,37 @@ import (
 	"time"
 )
 
-// ErrDiaFechamentoInvalido indica dia de fechamento fora de 1..31.
-var ErrDiaFechamentoInvalido = errors.New("fatura: dia de fechamento deve estar entre 1 e 31")
+// ErrDiaFechamentoInvalido reports a closing day outside 1..31.
+var ErrDiaFechamentoInvalido = errors.New("fatura: closing day must be between 1 and 31")
 
-// Competencia identifica uma fatura: ano e mes, sem dia.
+// Competencia identifies a statement: year and month, no day.
 //
-// Sem dia de proposito. A fatura e um balde mensal, e somar meses num par
-// (ano, mes) nao tem o problema de "31 de janeiro + 1 mes": nao existe 31 de
-// fevereiro para estourar.
+// No day on purpose. A statement is a monthly bucket, and adding months to a
+// (year, month) pair avoids the "January 31 + 1 month" problem entirely: there
+// is no February 31 to overflow into.
 type Competencia struct {
 	Ano int
 	Mes time.Month
 }
 
-// AdicionarMeses devolve a competencia N meses adiante.
+// AdicionarMeses returns the statement n months ahead.
 func (c Competencia) AdicionarMeses(n int) Competencia {
-	// time.Date normaliza mes fora de 1..12, entao dezembro + 1 vira janeiro do
-	// ano seguinte sem nenhuma conta de resto aqui.
+	// time.Date normalizes months outside 1..12, so December + 1 becomes
+	// January of the next year with no modulo arithmetic here.
 	t := time.Date(c.Ano, c.Mes+time.Month(n), 1, 0, 0, 0, 0, time.UTC)
 	return Competencia{Ano: t.Year(), Mes: t.Month()}
 }
 
-// De devolve em qual fatura uma compra cai, dado o dia de fechamento do cartao.
+// De returns which statement a purchase lands on, given the card's closing day.
 //
-// Compra feita no proprio dia do fechamento vai para a fatura seguinte: a
-// fatura fecha no inicio do dia, entao o dia ja pertence ao ciclo novo.
-// (Decisao do Augusto, 30/07/2026 -- varia por emissor.)
+// A purchase made on the closing day itself goes to the next statement: the
+// statement closes at the start of the day, so that day already belongs to the
+// new cycle. (Product decision, 2026-07-30 -- this varies by card issuer.)
 //
-// A comparacao e por numero do dia, sem ajustar o dia de fechamento ao tamanho
-// do mes. Isso resolve sozinho o cartao que fecha dia 31: em fevereiro todo dia
-// e menor que 31, entao toda compra do mes cai na fatura do proprio mes, que e
-// o comportamento certo.
+// The comparison is by day number, without clamping the closing day to the
+// length of the month. That alone handles cards that close on the 31st: in
+// February every day is below 31, so every purchase of the month lands on that
+// month's statement, which is the correct behavior.
 func De(compra time.Time, diaFechamento int) (Competencia, error) {
 	if diaFechamento < 1 || diaFechamento > 31 {
 		return Competencia{}, ErrDiaFechamentoInvalido
