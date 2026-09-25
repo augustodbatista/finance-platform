@@ -322,6 +322,14 @@ Toda pegadinha nova entra aqui **antes** de seguir.
   exit 7, não é ignorado. Análise estática do Dart fica por conta do `flutter analyze`.
 - **Actions em Node 20 já emitem aviso de depreciação** no runner. Não quebra hoje,
   quebra sozinho depois. Manter os pins nas majors atuais.
+- **A diretiva `go` do `go.mod` fixa a versão da stdlib, e a stdlib tem CVE.**
+  Sem nenhum commit nosso, `main` ficou vermelha em ago/2026: saíram 8
+  vulnerabilidades na stdlib corrigidas no 1.26.6, e o `go.mod` dizia `1.26.5`.
+  O job `go` seguiu verde (o `govulncheck` viu que o domínio não alcança as funções
+  afetadas); quem reprovou foi o `osv-scanner`, que não faz essa análise para a
+  stdlib. Correção: subir a diretiva para o **último patch da mesma minor**
+  (`go mod edit -go=1.26.X`) — o toolchain é baixado sozinho (`GOTOOLCHAIN=auto`).
+  Trocar de minor (1.27) é outra decisão e não é o que conserta isso.
 - **Os jobs Flutter do CI ficam dormentes até `app/` existir** (o `paths-filter` os
   desliga). É deliberado, não acidente: o primeiro commit em `app/` provavelmente
   acusa problema de config, e esse ajuste faz parte daquele commit.
