@@ -1,0 +1,146 @@
+:root {
+  --fundo: #f8fafc;
+  --cartao: #ffffff;
+  --texto: #0f172a;
+  --suave: #64748b;
+  --borda: #e2e8f0;
+  --marca: #0f766e;
+  --receita: #15803d;
+  --despesa: #b91c1c;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fundo: #0b1120;
+    --cartao: #111827;
+    --texto: #e5e7eb;
+    --suave: #94a3b8;
+    --borda: #1f2937;
+    --marca: #2dd4bf;
+    --receita: #4ade80;
+    --despesa: #f87171;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+main {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem 3rem;
+}
+
+form, section {
+  background: var(--cartao);
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+label, h2 {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--suave);
+  margin: 0 0 0.5rem;
+}
+
+.linha { display: flex; gap: 0.5rem; align-items: center; }
+.cabeca { justify-content: space-between; }
+.cabeca h2 { margin: 0; }
+
+input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  font-size: 1.15rem; /* >= 16px: impede o zoom automatico do iOS ao focar */
+  padding: 0.75rem;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  background: var(--fundo);
+  color: var(--texto);
+}
+
+input[type="month"] {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  background: var(--fundo);
+  color: var(--texto);
+}
+
+input:focus-visible, button:focus-visible {
+  outline: 2px solid var(--marca);
+  outline-offset: 2px;
+}
+
+button {
+  font: inherit;
+  font-weight: 600;
+  padding: 0.75rem 1rem;
+  border: 0;
+  border-radius: 8px;
+  background: var(--marca);
+  color: #fff;
+  cursor: pointer;
+}
+
+button:disabled { opacity: 0.6; }
+
+.dica { font-size: 0.85rem; color: var(--suave); margin: 0.5rem 0 0; }
+.dica code { font-size: 0.8rem; }
+.erro { color: var(--despesa); font-weight: 600; margin: 0.5rem 0 0; min-height: 1.2em; }
+.erro:empty { min-height: 0; margin: 0; }
+
+.numeros {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+}
+.numeros div { min-width: 0; }
+.numeros dt { font-size: 0.8rem; color: var(--suave); }
+.numeros dd {
+  margin: 0.15rem 0 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+#receitas { color: var(--receita); }
+#despesas { color: var(--despesa); }
+
+#lista { list-style: none; margin: 0; padding: 0; }
+#lista li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.25rem 0.75rem;
+  align-items: center;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--borda);
+}
+#lista li:first-child { border-top: 0; }
+.texto { overflow-wrap: anywhere; }
+.meta { grid-column: 1; font-size: 0.8rem; color: var(--suave); }
+.valor { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.valor.receita { color: var(--receita); }
+.apagar {
+  grid-row: span 2;
+  background: transparent;
+  color: var(--suave);
+  padding: 0.5rem;
+  min-width: 2.75rem;   /* alvo de toque >= 44px */
+  min-height: 2.75rem;
+}

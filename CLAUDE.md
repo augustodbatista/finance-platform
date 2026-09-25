@@ -67,21 +67,22 @@ os gatilhos que reabrem a decisão.
 ## Estrutura de Diretórios
 
 ```
-/api                    → backend Go
-/app                    → Flutter (mobile, web, desktop)
+/api/cmd/app            → binário do MVP (main + config)
+/api/internal/parser    → texto → lançamento
+/api/internal/fatura    → competência e parcelas
+/api/internal/resumo    → números do dashboard
+/api/internal/armazem   → persistência em JSON
+/api/internal/web       → HTTP + página (static/ embutido no binário)
 /docs/decisions         → RFCs e ADRs
 .github/workflows/ci.yml
 .golangci.yml
 osv-scanner.toml
 ```
 
-`api/` e `app/` ainda não existem — nascem no commit que trouxer o primeiro código de
-cada um. Git não versiona diretório vazio, e criar scaffolding "para depois" é dívida
-sem contrapartida.
+`app/` (Flutter) não existe — adiado pelo ADR-0001. Nasce no commit que trouxer o
+primeiro código dele.
 
 ## Variáveis de Ambiente
-
-Nenhuma ainda — o ciclo 1 é domínio puro, sem I/O.
 
 Regra: cada env var nova entra nesta tabela **no mesmo PR que a introduz**, com nome,
 propósito, obrigatória/opcional e onde é lida. Segredo nunca vai para o repositório —
@@ -90,7 +91,13 @@ pegar vazamento acidental.
 
 | Nome | Propósito | Obrigatória | Onde é usada |
 |---|---|---|---|
-| — | — | — | — |
+| `FINANCE_DIA_FECHAMENTO` | Dia de fechamento do cartão (1..31) | **Sim** | `cmd/app` → `resumo` |
+| `FINANCE_ENDERECO` | `host:porta` onde escutar. Padrão `127.0.0.1:8080` (só esta máquina) | Não | `cmd/app` |
+| `FINANCE_DADOS` | Caminho do arquivo JSON. Padrão `dados.json` | Não | `cmd/app` → `armazem` |
+| `FINANCE_SENHA` | Senha do Basic Auth, mín. 8 caracteres | **Sim fora do loopback** | `cmd/app` → `web` |
+
+`:8080` sem host escuta em **todas** as interfaces — parece local, não é, e exige
+senha. Testado.
 
 ## Principais Serviços, Jobs e Models
 
@@ -240,6 +247,30 @@ Descoberto e declarado: falhas de serializar, write, sync, close e chmod do
 temporário. Não induzíveis sem mock de filesystem, e o mock seria interface com
 uma implementação só.
 
+### `api/internal/web` — HTTP e página do MVP
+
+`Novo(Config) http.Handler`. Rotas: `GET /` (página), `GET/POST /api/lancamentos`,
+`DELETE /api/lancamentos/{id}`, `GET /api/resumo?mes=AAAA-MM`. A página
+(`static/`) vai embutida no binário. Cobertura 98,9%.
+
+Superfícies e tratamento, todas com teste:
+
+| Ameaça | Tratamento |
+|---|---|
+| Qualquer um na mesma rede | Basic Auth (prompt nativo). SHA-256 + comparação em tempo constante: nem o tamanho da senha vaza |
+| CSRF (o navegador reenvia a senha sozinho) | POST exige `Content-Type: application/json` → 415. Formulário de outro site não consegue enviar isso sem preflight CORS, que o servidor não autoriza |
+| XSS pelo texto digitado | Front usa `textContent`, nunca `innerHTML`; CSP `default-src 'self'` (nada inline — por isso CSS e JS são arquivos separados); `frame-ancestors 'none'` |
+| Corpo gigante | `MaxBytesReader` de 4KB → 413 |
+| Cliente lento segurando conexão | Timeouts explícitos no `http.Server` |
+
+Erros do domínio viram 400 com mensagem em português que diz como corrigir. Falha
+de disco vira 500 dizendo **o que não aconteceu** ("Nada foi gravado") para o
+usuário saber que precisa redigitar. Descoberto e declarado: o `default` de
+`mensagem`, inalcançável enquanto o parser só devolve erros já mapeados.
+
+Sem TLS: a senha trafega em claro na rede local. Aceitável em casa, inaceitável em
+rede pública (ADR-0001).
+
 ## Design Patterns e Convenções
 
 - **Dinheiro é `int64` em centavos. Nunca `float64`.** `0.1 + 0.2 != 0.3` em ponto
@@ -277,11 +308,9 @@ Entrada do usuário ("120 mercado")
   → Dashboard (saldo, receitas do mês, despesas do mês, economia)
 ```
 
-Implementadas: parser, e o dashboard como cálculo puro (`api/internal/resumo`,
-alimentado por `api/internal/fatura`). Falta tudo que tem I/O — persistência,
-sync, API. **A próxima fronteira exige uma decisão que ainda não foi tomada:**
-começar pela persistência local (Flutter + Drift, em `app/`) ou pela API Go
-(`api/`, com Postgres). Os dois destravam o mesmo domínio, que já está pronto.
+**MVP (ADR-0001):** entrada → `parser` → `armazem` (JSON) → `resumo` → página.
+Sem sync, sem Postgres, sem Flutter. O fluxo acima continua sendo o alvo; o ADR
+lista os gatilhos que fazem voltar a ele.
 
 ## Segurança — superfícies conhecidas
 
@@ -384,6 +413,22 @@ Do diretório `api/`, com o PATH já exportado:
 ```bash
 export PATH="$PATH:/c/Program Files/Go/bin" && cd /c/finance-platform/api && gofmt -l . && go test -cover ./...
 ```
+
+Subir o MVP só nesta máquina:
+
+```bash
+cd /c/finance-platform/api && FINANCE_DIA_FECHAMENTO=28 go run ./cmd/app
+```
+
+Para abrir no celular (mesma wifi), escutar em todas as interfaces com senha — o
+log imprime o endereço a digitar no celular:
+
+```bash
+cd /c/finance-platform/api && FINANCE_DIA_FECHAMENTO=28 FINANCE_ENDERECO=0.0.0.0:8080 FINANCE_SENHA=troque-esta-senha go run ./cmd/app
+```
+
+Na primeira vez o Windows pergunta se libera o programa no firewall: liberar só em
+**rede privada**.
 
 Sem `-race` local (ver Common Hurdles). O CI roda `-race` no Linux.
 

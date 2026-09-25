@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f766e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Finanças">
+  <title>Finanças</title>
+  <link rel="stylesheet" href="app.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main>
+    <form id="lancar" autocomplete="off">
+      <label for="texto">Novo lançamento</label>
+      <div class="linha">
+        <input id="texto" name="texto" type="text" required maxlength="200"
+               placeholder="120 mercado" enterkeyhint="send" autofocus
+               aria-describedby="dica erro">
+        <button type="submit">Lançar</button>
+      </div>
+      <p id="dica" class="dica">Ex.: <code>42,50 almoço</code> · <code>3x 300 tv</code> · <code>salário 3500</code> · <code>uber 18 ontem pix</code></p>
+      <p id="erro" class="erro" role="alert" aria-live="assertive"></p>
+    </form>
+
+    <section aria-labelledby="t-mes">
+      <div class="linha cabeca">
+        <h2 id="t-mes">Resumo do mês</h2>
+        <input id="mes" type="month" aria-label="Mês do resumo">
+      </div>
+      <dl class="numeros">
+        <div><dt>Receitas</dt><dd id="receitas">–</dd></div>
+        <div><dt>Despesas</dt><dd id="despesas">–</dd></div>
+        <div><dt>Economia</dt><dd id="economia">–</dd></div>
+      </dl>
+      <p class="dica">Compras no crédito contam no mês da fatura, não no da compra.</p>
+    </section>
+
+    <section aria-labelledby="t-lista">
+      <h2 id="t-lista">Últimos lançamentos</h2>
+      <ul id="lista"></ul>
+      <p id="vazio" class="dica" hidden>Nenhum lançamento ainda. Digite o primeiro lá em cima.</p>
+    </section>
+  </main>
+</body>
+</html>
