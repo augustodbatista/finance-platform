@@ -1,14 +1,20 @@
-// Package web expoe o dominio por HTTP e serve a pagina do MVP (ADR-0001).
+// Package web exposes the domain over HTTP and serves the MVP page (ADR-0001).
 //
-// A pagina roda no navegador do celular, acessando o PC pela rede local. Isso
-// cria superficie que o dominio puro nao tinha, tratada aqui:
+// The page runs in the phone's browser, reaching the PC over the local network.
+// That creates attack surface the pure domain did not have, handled here:
 //
-//   - Qualquer um na mesma rede: senha via Basic Auth (prompt nativo do navegador).
-//   - CSRF: com Basic Auth o navegador reenvia a senha sozinho, entao o POST exige
-//     Content-Type application/json -- formulario de outro site nao consegue
-//     manda-lo sem preflight CORS, que este servidor nao autoriza.
-//   - XSS: CSP default-src 'self' (nada inline) e o front usa textContent.
-//   - Corpo gigante: MaxBytesReader.
+//   - Anyone on the same network: password via Basic Auth (the browser's
+//     native prompt).
+//   - CSRF: with Basic Auth the browser resends the password on its own, so
+//     POST requires Content-Type application/json -- a form on another site
+//     cannot send that without a CORS preflight, which this server never
+//     grants.
+//   - XSS: CSP default-src 'self' (nothing inline) and the front end uses
+//     textContent.
+//   - Oversized bodies: MaxBytesReader.
+//
+// User-facing messages are in Portuguese on purpose: the product and its users
+// are Brazilian.
 package web
 
 import (
@@ -32,28 +38,28 @@ import (
 //go:embed static
 var static embed.FS
 
-// maxCorpo limita o corpo das requisicoes. Um lancamento tem no maximo
-// parser.MaxEntrada bytes; 4KB sobram para o envelope JSON e escapes.
+// maxCorpo caps request bodies. An entry is at most parser.MaxEntrada bytes;
+// 4KB leaves plenty for the JSON envelope and escapes.
 const maxCorpo = 4 << 10
 
-// Config e o que o servidor precisa para funcionar.
+// Config is what the server needs to run.
 type Config struct {
 	Armazem       *armazem.Armazem
 	DiaFechamento int
-	// Senha vazia desliga a autenticacao. Quem decide se isso e aceitavel e o
-	// main, que so permite senha vazia escutando em loopback.
+	// An empty Senha (password) disables authentication. Whether that is
+	// acceptable is decided by main, which only allows it on loopback.
 	Senha string
-	// Agora e o relogio. Injetado pelo mesmo motivo do parser: teste que
-	// depende do calendario nao e teste.
+	// Agora is the clock. Injected for the same reason as in the parser: a test
+	// that depends on the calendar is not a test.
 	Agora func() time.Time
 }
 
-// Novo monta o handler com todas as rotas e protecoes.
+// Novo builds the handler with every route and protection.
 func Novo(c Config) http.Handler {
 	s := &servidor{c}
 	mux := http.NewServeMux()
 
-	sub, _ := fs.Sub(static, "static") // "static" existe: senao o embed nem compila
+	sub, _ := fs.Sub(static, "static") // "static" exists, or the embed would not compile
 	mux.Handle("GET /", http.FileServerFS(sub))
 	mux.HandleFunc("GET /api/lancamentos", s.listar)
 	mux.HandleFunc("POST /api/lancamentos", s.lancar)
@@ -87,7 +93,7 @@ func paraJSON(r armazem.Registro) registroJSON {
 
 func (s *servidor) listar(w http.ResponseWriter, _ *http.Request) {
 	rs := s.Armazem.Listar()
-	out := make([]registroJSON, 0, len(rs)) // [] e nao null: o front faz forEach
+	out := make([]registroJSON, 0, len(rs)) // [] rather than null: the front end iterates it
 	for _, r := range rs {
 		out = append(out, paraJSON(r))
 	}
@@ -174,7 +180,7 @@ func (s *servidor) resumo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// mensagem traduz erro de dominio em algo que o usuario entende e corrige.
+// mensagem turns a domain error into something the user understands and can fix.
 func mensagem(err error) string {
 	switch {
 	case errors.Is(err, parser.ErrSemValor):
@@ -197,7 +203,7 @@ func mensagem(err error) string {
 func responder(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v) // cabecalho ja foi enviado; nao ha como avisar o cliente
+	_ = json.NewEncoder(w).Encode(v) // headers already sent; no way to tell the client
 }
 
 func falhar(w http.ResponseWriter, status int, msg string) {
@@ -214,9 +220,10 @@ func cabecalhos(next http.Handler) http.Handler {
 	})
 }
 
-// autenticar exige Basic Auth quando ha senha. As duas senhas passam por
-// SHA-256 antes da comparacao em tempo constante: assim os dois lados tem o
-// mesmo tamanho e nem o comprimento da senha vaza pelo tempo de resposta.
+// autenticar requires Basic Auth when a password is set. Both passwords are
+// hashed with SHA-256 before the constant-time comparison: that way both sides
+// have the same length and not even the password's length leaks through
+// response timing.
 func autenticar(senha string, next http.Handler) http.Handler {
 	if senha == "" {
 		return next
@@ -227,7 +234,7 @@ func autenticar(senha string, next http.Handler) http.Handler {
 		got := sha256.Sum256([]byte(dada))
 		if !ok || subtle.ConstantTimeCompare(got[:], quero[:]) != 1 {
 			w.Header().Set("WWW-Authenticate", `Basic realm="finance", charset="UTF-8"`)
-			http.Error(w, "senha necessaria", http.StatusUnauthorized)
+			http.Error(w, "senha necessária", http.StatusUnauthorized)
 			return
 		}
 		next.ServeHTTP(w, r)

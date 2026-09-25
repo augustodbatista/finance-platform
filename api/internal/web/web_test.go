@@ -47,7 +47,7 @@ func lancar(t *testing.T, h http.Handler, texto string) map[string]any {
 	b, _ := json.Marshal(map[string]string{"texto": texto})
 	w := req(t, h, http.MethodPost, "/api/lancamentos", string(b))
 	if w.Code != http.StatusCreated {
-		t.Fatalf("POST %q: status %d, corpo %s", texto, w.Code, w.Body)
+		t.Fatalf("POST %q: status %d, body %s", texto, w.Code, w.Body)
 	}
 	var r map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &r); err != nil {
@@ -61,7 +61,7 @@ func TestLancarEListar(t *testing.T) {
 	r := lancar(t, h, "3x 300 mercado")
 	if r["centavos"] != float64(30000) || r["parcelas"] != float64(3) ||
 		r["forma"] != "credito" || r["texto"] != "3x 300 mercado" {
-		t.Errorf("resposta do POST = %v", r)
+		t.Errorf("POST response = %v", r)
 	}
 
 	w := req(t, h, http.MethodGet, "/api/lancamentos", "")
@@ -70,18 +70,18 @@ func TestLancarEListar(t *testing.T) {
 		t.Fatalf("GET: %v (%s)", err, w.Body)
 	}
 	if len(lista) != 1 || lista[0]["texto"] != "3x 300 mercado" {
-		t.Errorf("lista = %v", lista)
+		t.Errorf("list = %v", lista)
 	}
 }
 
 func TestListaVaziaEArrayNaoNull(t *testing.T) {
 	w := req(t, novo(t, ""), http.MethodGet, "/api/lancamentos", "")
 	if strings.TrimSpace(w.Body.String()) != "[]" {
-		t.Errorf("lista vazia = %q, quero [] (o JS do front faria forEach em null)", w.Body)
+		t.Errorf("empty list = %q, want [] (the front end would iterate over null)", w.Body)
 	}
 }
 
-// Entrada que o parser recusa volta como 400 com mensagem legivel, nao 500.
+// Input the parser rejects comes back as 400 with a readable message, not 500.
 func TestLancar_EntradaInvalida(t *testing.T) {
 	casos := map[string]string{
 		`{"texto":"mercado"}`:   "valor",
@@ -95,10 +95,10 @@ func TestLancar_EntradaInvalida(t *testing.T) {
 		t.Run(corpo, func(t *testing.T) {
 			w := req(t, novo(t, ""), http.MethodPost, "/api/lancamentos", corpo)
 			if w.Code != http.StatusBadRequest {
-				t.Errorf("status %d, quero 400", w.Code)
+				t.Errorf("status %d, want 400", w.Code)
 			}
 			if !strings.Contains(strings.ToLower(w.Body.String()), trecho) {
-				t.Errorf("mensagem %q nao menciona %q", w.Body, trecho)
+				t.Errorf("message %q does not mention %q", w.Body, trecho)
 			}
 		})
 	}
@@ -108,12 +108,12 @@ func TestLancar_CorpoGrandeERecusado(t *testing.T) {
 	corpo := `{"texto":"` + strings.Repeat("a", 10_000) + `"}`
 	w := req(t, novo(t, ""), http.MethodPost, "/api/lancamentos", corpo)
 	if w.Code != http.StatusBadRequest && w.Code != http.StatusRequestEntityTooLarge {
-		t.Errorf("status %d, quero 400 ou 413", w.Code)
+		t.Errorf("status %d, want 400 or 413", w.Code)
 	}
 }
 
-// CSRF: um formulario de outro site so consegue mandar form-urlencoded,
-// multipart ou text/plain sem preflight. Exigir JSON fecha essa porta.
+// CSRF: a form on another site can only send form-urlencoded, multipart or
+// text/plain without a preflight. Requiring JSON closes that door.
 func TestLancar_ExigeContentTypeJSON(t *testing.T) {
 	h := novo(t, "")
 	r := httptest.NewRequest(http.MethodPost, "/api/lancamentos", strings.NewReader(`{"texto":"10 mercado"}`))
@@ -121,10 +121,10 @@ func TestLancar_ExigeContentTypeJSON(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusUnsupportedMediaType {
-		t.Errorf("status %d, quero 415", w.Code)
+		t.Errorf("status %d, want 415", w.Code)
 	}
 	if n := len(listar(t, h)); n != 0 {
-		t.Errorf("gravou %d lancamentos com content-type errado", n)
+		t.Errorf("saved %d entries with the wrong content type", n)
 	}
 }
 
@@ -141,13 +141,13 @@ func TestRemover(t *testing.T) {
 	alvo := "/api/lancamentos/" + strconv.FormatInt(id, 10)
 
 	if w := req(t, h, http.MethodDelete, alvo, ""); w.Code != http.StatusNoContent {
-		t.Errorf("DELETE: status %d, quero 204", w.Code)
+		t.Errorf("DELETE: status %d, want 204", w.Code)
 	}
 	if w := req(t, h, http.MethodDelete, alvo, ""); w.Code != http.StatusNotFound {
-		t.Errorf("DELETE de novo: status %d, quero 404", w.Code)
+		t.Errorf("DELETE again: status %d, want 404", w.Code)
 	}
 	if w := req(t, h, http.MethodDelete, "/api/lancamentos/abc", ""); w.Code != http.StatusBadRequest {
-		t.Errorf("DELETE com id invalido: status %d, quero 400", w.Code)
+		t.Errorf("DELETE with invalid id: status %d, want 400", w.Code)
 	}
 }
 
@@ -155,7 +155,7 @@ func TestResumo(t *testing.T) {
 	h := novo(t, "")
 	lancar(t, h, "salario 3500")
 	lancar(t, h, "120 mercado debito")
-	lancar(t, h, "3x 300 casa") // credito inferido: R$ 100 em setembro
+	lancar(t, h, "3x 300 casa") // credit inferred: R$ 100 in September
 
 	var r map[string]any
 	w := req(t, h, http.MethodGet, "/api/resumo?mes=2026-09", "")
@@ -163,18 +163,18 @@ func TestResumo(t *testing.T) {
 		t.Fatalf("%v (%s)", err, w.Body)
 	}
 	if r["receitas"] != float64(350000) || r["despesas"] != float64(22000) || r["economia"] != float64(328000) {
-		t.Errorf("resumo de setembro = %v", r)
+		t.Errorf("September summary = %v", r)
 	}
 
-	// Sem parametro, e o mes corrente.
+	// With no parameter, it is the current month.
 	var r2 map[string]any
 	_ = json.Unmarshal(req(t, h, http.MethodGet, "/api/resumo", "").Body.Bytes(), &r2)
 	if r2["despesas"] != r["despesas"] {
-		t.Errorf("resumo sem mes = %v, quero o de setembro/2026", r2)
+		t.Errorf("summary with no month = %v, want September 2026", r2)
 	}
 
 	if w := req(t, h, http.MethodGet, "/api/resumo?mes=setembro", ""); w.Code != http.StatusBadRequest {
-		t.Errorf("mes invalido: status %d, quero 400", w.Code)
+		t.Errorf("invalid month: status %d, want 400", w.Code)
 	}
 }
 
@@ -182,9 +182,9 @@ func TestSenha(t *testing.T) {
 	h := novo(t, "segredo")
 
 	if w := req(t, h, http.MethodGet, "/api/lancamentos", ""); w.Code != http.StatusUnauthorized {
-		t.Errorf("sem senha: status %d, quero 401", w.Code)
+		t.Errorf("no password: status %d, want 401", w.Code)
 	} else if !strings.HasPrefix(w.Header().Get("WWW-Authenticate"), "Basic") {
-		t.Error("401 sem WWW-Authenticate: o navegador nao mostra o prompt de senha")
+		t.Error("401 without WWW-Authenticate: the browser will not show the password prompt")
 	}
 
 	for _, senha := range []string{"errada", "segredo "} {
@@ -193,7 +193,7 @@ func TestSenha(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 		if w.Code != http.StatusUnauthorized {
-			t.Errorf("senha %q: status %d, quero 401", senha, w.Code)
+			t.Errorf("password %q: status %d, want 401", senha, w.Code)
 		}
 	}
 
@@ -202,7 +202,7 @@ func TestSenha(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
-		t.Errorf("senha certa: status %d, quero 200", w.Code)
+		t.Errorf("correct password: status %d, want 200", w.Code)
 	}
 }
 
@@ -216,7 +216,7 @@ func TestPaginaECabecalhosDeSeguranca(t *testing.T) {
 		t.Errorf("CSP = %q", csp)
 	}
 	if w.Header().Get("X-Content-Type-Options") != "nosniff" {
-		t.Error("sem X-Content-Type-Options: nosniff")
+		t.Error("missing X-Content-Type-Options: nosniff")
 	}
 
 	if w := req(t, h, http.MethodGet, "/app.js", ""); w.Code != http.StatusOK {
@@ -232,13 +232,13 @@ func TestLancar_MensagensDosDemaisErros(t *testing.T) {
 	for corpo, trecho := range casos {
 		w := req(t, novo(t, ""), http.MethodPost, "/api/lancamentos", corpo)
 		if w.Code != http.StatusBadRequest || !strings.Contains(strings.ToLower(w.Body.String()), trecho) {
-			t.Errorf("status %d, corpo %s; quero 400 mencionando %q", w.Code, w.Body, trecho)
+			t.Errorf("status %d, body %s; want 400 mentioning %q", w.Code, w.Body, trecho)
 		}
 	}
 }
 
-// Falha de disco vira 500 com mensagem que diz o que NAO aconteceu -- o
-// usuario precisa saber que o lancamento nao foi salvo, para redigitar.
+// A disk failure becomes a 500 whose message says what did NOT happen -- the
+// user needs to know the entry was not saved, so they type it again.
 func TestFalhaDeGravacao(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "dados.json")
 	a, err := armazem.Abrir(p)
@@ -248,7 +248,7 @@ func TestFalhaDeGravacao(t *testing.T) {
 	h := web.Novo(web.Config{Armazem: a, DiaFechamento: 28, Agora: func() time.Time { return agora }})
 	id := int64(lancar(t, h, "10 mercado")["id"].(float64))
 
-	// Troca o arquivo por um diretorio: toda gravacao seguinte falha no rename.
+	// Replace the file with a directory: every later write fails at rename.
 	if err := os.Remove(p); err != nil {
 		t.Fatal(err)
 	}
@@ -258,20 +258,20 @@ func TestFalhaDeGravacao(t *testing.T) {
 
 	w := req(t, h, http.MethodPost, "/api/lancamentos", `{"texto":"20 uber"}`)
 	if w.Code != http.StatusInternalServerError || !strings.Contains(w.Body.String(), "Nada foi gravado") {
-		t.Errorf("POST: status %d, corpo %s", w.Code, w.Body)
+		t.Errorf("POST: status %d, body %s", w.Code, w.Body)
 	}
 	w = req(t, h, http.MethodDelete, "/api/lancamentos/"+strconv.FormatInt(id, 10), "")
 	if w.Code != http.StatusInternalServerError || !strings.Contains(w.Body.String(), "Nada foi alterado") {
-		t.Errorf("DELETE: status %d, corpo %s", w.Code, w.Body)
+		t.Errorf("DELETE: status %d, body %s", w.Code, w.Body)
 	}
 }
 
 func TestResumo_ConfigInvalidaViraErro500(t *testing.T) {
 	a, _ := armazem.Abrir(filepath.Join(t.TempDir(), "dados.json"))
 	h := web.Novo(web.Config{Armazem: a, DiaFechamento: 0, Agora: func() time.Time { return agora }})
-	lancar(t, h, "3x 300 tv") // credito: so ele precisa do dia de fechamento
+	lancar(t, h, "3x 300 tv") // credit: the only case that needs the closing day
 
 	if w := req(t, h, http.MethodGet, "/api/resumo", ""); w.Code != http.StatusInternalServerError {
-		t.Errorf("status %d, quero 500", w.Code)
+		t.Errorf("status %d, want 500", w.Code)
 	}
 }

@@ -1,8 +1,11 @@
 "use strict";
 
-// Todo texto vindo do servidor entra na pagina por textContent, nunca por
-// innerHTML: o texto do lancamento e digitado pelo usuario, e innerHTML abriria
-// XSS. A CSP (default-src 'self') e a segunda barreira, nao a primeira.
+// Every piece of text coming from the server enters the page through
+// textContent, never innerHTML: entry text is typed by the user, and innerHTML
+// would open an XSS hole. The CSP (default-src 'self') is the second barrier,
+// not the first.
+//
+// UI strings are in Portuguese on purpose: the product is for Brazilian users.
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const dataBR = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "UTC" });
@@ -74,7 +77,7 @@ function item(l) {
 
 async function carregarLista() {
   const lista = await api("GET", "/api/lancamentos");
-  // ponytail: mostra so os 50 mais recentes; paginacao entra quando fizer falta.
+  // ponytail: shows only the 50 newest entries; pagination arrives when it is missed.
   $("lista").replaceChildren(...lista.slice(0, 50).map(item));
   $("vazio").hidden = lista.length > 0;
 }
@@ -108,7 +111,7 @@ $("lancar").addEventListener("submit", async (ev) => {
     campo.value = "";
     await atualizar();
   } catch (e) {
-    // O texto fica no campo para o usuario corrigir em vez de redigitar.
+    // The text stays in the field so the user can fix it instead of retyping.
     $("erro").textContent = e.message;
   } finally {
     botao.disabled = false;

@@ -64,7 +64,7 @@ label, h2 {
 input[type="text"] {
   flex: 1;
   min-width: 0;
-  font-size: 1.15rem; /* >= 16px: impede o zoom automatico do iOS ao focar */
+  font-size: 1.15rem; /* >= 16px: stops iOS from auto-zooming on focus */
   padding: 0.75rem;
   border: 1px solid var(--borda);
   border-radius: 8px;
@@ -141,6 +141,6 @@ button:disabled { opacity: 0.6; }
   background: transparent;
   color: var(--suave);
   padding: 0.5rem;
-  min-width: 2.75rem;   /* alvo de toque >= 44px */
+  min-width: 2.75rem;   /* touch target >= 44px */
   min-height: 2.75rem;
 }

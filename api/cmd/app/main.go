@@ -1,12 +1,14 @@
-// Comando app e o MVP do Finance Platform (ADR-0001): um binario que serve a
-// pagina e guarda os lancamentos num arquivo JSON.
+// Command app is the Finance Platform MVP (ADR-0001): one binary that serves
+// the page and stores entries in a JSON file.
 //
-// Configuracao por variavel de ambiente (ver tabela no CLAUDE.md):
+// Configuration via environment variables (see the README):
 //
-//	FINANCE_DIA_FECHAMENTO  obrigatoria, 1..31
-//	FINANCE_ENDERECO        padrao 127.0.0.1:8080 (so esta maquina)
-//	FINANCE_DADOS           padrao dados.json
-//	FINANCE_SENHA           obrigatoria fora do loopback, minimo 8 caracteres
+//	FINANCE_DIA_FECHAMENTO  required, card closing day, 1..31
+//	FINANCE_ENDERECO        listen address, default 127.0.0.1:8080 (this machine only)
+//	FINANCE_DADOS           data file, default dados.json
+//	FINANCE_SENHA           password, required off loopback, at least 8 characters
+//
+// Operator-facing messages are in Portuguese, like the rest of the UI.
 package main
 
 import (
@@ -30,12 +32,12 @@ type config struct {
 	diaFechamento int
 }
 
-// carregar le e valida a configuracao. Recebe getenv em vez de chamar
-// os.Getenv para ser testavel sem mexer no ambiente do processo.
+// carregar reads and validates the configuration. It takes getenv instead of
+// calling os.Getenv so it can be tested without touching the process
+// environment.
 //
-// Falha cedo e com mensagem que diz o que fazer: config errada descoberta na
-// subida custa um reinicio; descoberta no meio do uso custa um numero errado
-// na tela.
+// It fails early, with a message that says what to do: bad config found at
+// startup costs a restart; found mid-use, it costs a wrong number on screen.
 func carregar(getenv func(string) string) (config, error) {
 	c := config{
 		endereco: padrao(getenv("FINANCE_ENDERECO"), "127.0.0.1:8080"),
@@ -45,18 +47,18 @@ func carregar(getenv func(string) string) (config, error) {
 
 	dia, err := strconv.Atoi(getenv("FINANCE_DIA_FECHAMENTO"))
 	if err != nil || dia < 1 || dia > 31 {
-		return config{}, errors.New("FINANCE_DIA_FECHAMENTO deve ser o dia de fechamento do cartao, de 1 a 31")
+		return config{}, errors.New("FINANCE_DIA_FECHAMENTO deve ser o dia de fechamento do cartão, de 1 a 31")
 	}
 	c.diaFechamento = dia
 
 	host, _, err := net.SplitHostPort(c.endereco)
 	if err != nil {
-		return config{}, fmt.Errorf("FINANCE_ENDERECO invalido (%q): use host:porta, ex. 0.0.0.0:8080", c.endereco)
+		return config{}, fmt.Errorf("FINANCE_ENDERECO inválido (%q): use host:porta, ex. 0.0.0.0:8080", c.endereco)
 	}
 
 	if !loopback(host) {
 		if c.senha == "" {
-			return config{}, fmt.Errorf("FINANCE_SENHA e obrigatoria ao escutar em %s: sem ela, qualquer um na mesma rede ve seus dados", c.endereco)
+			return config{}, fmt.Errorf("FINANCE_SENHA é obrigatória ao escutar em %s: sem ela, qualquer um na mesma rede vê seus dados", c.endereco)
 		}
 		if len(c.senha) < 8 {
 			return config{}, errors.New("FINANCE_SENHA deve ter pelo menos 8 caracteres")
@@ -65,8 +67,9 @@ func carregar(getenv func(string) string) (config, error) {
 	return c, nil
 }
 
-// loopback diz se o host so aceita conexao desta maquina. Host vazio (":8080")
-// escuta em todas as interfaces, entao NAO e loopback, apesar de parecer local.
+// loopback reports whether the host only accepts connections from this
+// machine. An empty host (":8080") listens on every interface, so it is NOT
+// loopback, even though it looks local.
 func loopback(host string) bool {
 	if host == "localhost" {
 		return true
@@ -101,8 +104,8 @@ func main() {
 			Senha:         c.senha,
 			Agora:         time.Now,
 		}),
-		// Timeouts explicitos: sem eles, um cliente lento segura conexoes para
-		// sempre (e o gosec reprova).
+		// Explicit timeouts: without them a slow client holds connections
+		// forever (and gosec fails the build).
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
@@ -114,9 +117,9 @@ func main() {
 	log.Fatal(srv.ListenAndServe())
 }
 
-// anunciar imprime os enderecos para abrir no celular. Quando o servidor escuta
-// em todas as interfaces, o endereco util e o IP da maquina na rede local, que
-// o usuario nao sabe de cabeca.
+// anunciar prints the addresses to open on the phone. When the server listens
+// on every interface, the useful address is the machine's local network IP,
+// which the user does not know by heart.
 func anunciar(endereco string) {
 	host, porta, _ := net.SplitHostPort(endereco)
 	if host != "" && host != "0.0.0.0" && host != "::" {

@@ -12,7 +12,7 @@ func env(m map[string]string) func(string) string {
 func TestCarregar_Padroes(t *testing.T) {
 	c, err := carregar(env(map[string]string{"FINANCE_DIA_FECHAMENTO": "28"}))
 	if err != nil {
-		t.Fatalf("erro inesperado: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if c.endereco != "127.0.0.1:8080" || c.dados != "dados.json" || c.diaFechamento != 28 || c.senha != "" {
 		t.Errorf("config = %+v", c)
@@ -25,22 +25,23 @@ func TestCarregar_Erros(t *testing.T) {
 		env    map[string]string
 		trecho string
 	}{
-		{"sem dia de fechamento", map[string]string{}, "FINANCE_DIA_FECHAMENTO"},
-		{"dia nao numerico", map[string]string{"FINANCE_DIA_FECHAMENTO": "vinte"}, "FINANCE_DIA_FECHAMENTO"},
-		{"dia fora da faixa", map[string]string{"FINANCE_DIA_FECHAMENTO": "32"}, "FINANCE_DIA_FECHAMENTO"},
-		{"endereco invalido", map[string]string{"FINANCE_DIA_FECHAMENTO": "28", "FINANCE_ENDERECO": "sem-porta"}, "FINANCE_ENDERECO"},
-		// O motivo deste teste existir: expor na rede sem senha entregaria os
-		// dados financeiros a qualquer um na mesma wifi.
-		{"rede sem senha", map[string]string{"FINANCE_DIA_FECHAMENTO": "28", "FINANCE_ENDERECO": "0.0.0.0:8080"}, "FINANCE_SENHA"},
-		// ":8080" sem host escuta em TODAS as interfaces -- parece local, nao e.
-		{"host vazio sem senha", map[string]string{"FINANCE_DIA_FECHAMENTO": "28", "FINANCE_ENDERECO": ":8080"}, "FINANCE_SENHA"},
-		{"senha curta", map[string]string{"FINANCE_DIA_FECHAMENTO": "28", "FINANCE_ENDERECO": "0.0.0.0:8080", "FINANCE_SENHA": "1234"}, "8 caracteres"},
+		{"missing closing day", map[string]string{}, "FINANCE_DIA_FECHAMENTO"},
+		{"non-numeric day", map[string]string{"FINANCE_DIA_FECHAMENTO": "vinte"}, "FINANCE_DIA_FECHAMENTO"},
+		{"day out of range", map[string]string{"FINANCE_DIA_FECHAMENTO": "32"}, "FINANCE_DIA_FECHAMENTO"},
+		{"invalid address", map[string]string{"FINANCE_DIA_FECHAMENTO": "28", "FINANCE_ENDERECO": "sem-porta"}, "FINANCE_ENDERECO"},
+		// The reason this test exists: exposing the app on the network without
+		// a password would hand the financial data to anyone on the same wifi.
+		{"network without password", map[string]string{"FINANCE_DIA_FECHAMENTO": "28", "FINANCE_ENDERECO": "0.0.0.0:8080"}, "FINANCE_SENHA"},
+		// ":8080" with no host listens on ALL interfaces -- it looks local, it
+		// is not.
+		{"empty host without password", map[string]string{"FINANCE_DIA_FECHAMENTO": "28", "FINANCE_ENDERECO": ":8080"}, "FINANCE_SENHA"},
+		{"short password", map[string]string{"FINANCE_DIA_FECHAMENTO": "28", "FINANCE_ENDERECO": "0.0.0.0:8080", "FINANCE_SENHA": "1234"}, "8 caracteres"},
 	}
 	for _, c := range casos {
 		t.Run(c.nome, func(t *testing.T) {
 			_, err := carregar(env(c.env))
 			if err == nil || !strings.Contains(err.Error(), c.trecho) {
-				t.Errorf("erro = %v, quero mencionando %q", err, c.trecho)
+				t.Errorf("error = %v, want one mentioning %q", err, c.trecho)
 			}
 		})
 	}
@@ -53,7 +54,7 @@ func TestCarregar_Aceitos(t *testing.T) {
 		{"FINANCE_DIA_FECHAMENTO": "28", "FINANCE_ENDERECO": "0.0.0.0:8080", "FINANCE_SENHA": "senha-boa"},
 	} {
 		if _, err := carregar(env(e)); err != nil {
-			t.Errorf("%v: erro inesperado %v", e, err)
+			t.Errorf("%v: unexpected error %v", e, err)
 		}
 	}
 }
