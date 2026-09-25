@@ -40,12 +40,12 @@ func abrir(t *testing.T, p string) *armazem.Armazem {
 func TestAbrir_ArquivoInexistenteComecaVazio(t *testing.T) {
 	a := abrir(t, caminho(t))
 	if n := len(a.Listar()); n != 0 {
-		t.Errorf("Listar() tem %d registros, quero 0", n)
+		t.Errorf("Listar() has %d records, want 0", n)
 	}
 }
 
-// O teste que importa: o que foi gravado sobrevive a fechar e reabrir, campo por
-// campo. Se isso falhar, o app perde dinheiro registrado.
+// The test that matters: what was saved survives closing and reopening, field
+// by field. If this fails, the app loses recorded money.
 func TestAdicionar_PersisteEntreAberturas(t *testing.T) {
 	p := caminho(t)
 	l := lanc(t, "3x 300 mercado credito 15/09")
@@ -57,16 +57,16 @@ func TestAdicionar_PersisteEntreAberturas(t *testing.T) {
 
 	lista := abrir(t, p).Listar()
 	if len(lista) != 1 {
-		t.Fatalf("depois de reabrir, %d registros, quero 1", len(lista))
+		t.Fatalf("after reopening, %d records, want 1", len(lista))
 	}
 	got := lista[0]
 	if got.ID != r.ID || got.Texto != "3x 300 mercado credito 15/09" {
-		t.Errorf("registro = %+v, quero ID %d e o texto original", got, r.ID)
+		t.Errorf("record = %+v, want ID %d and the original text", got, r.ID)
 	}
 	gl := got.Lancamento
 	if gl.Centavos != l.Centavos || gl.Categoria != l.Categoria || gl.Tipo != l.Tipo ||
 		gl.Forma != l.Forma || gl.Parcelas != l.Parcelas || !gl.Data.Equal(l.Data) {
-		t.Errorf("lancamento reaberto = %+v, quero %+v", gl, l)
+		t.Errorf("reopened entry = %+v, want %+v", gl, l)
 	}
 }
 
@@ -80,7 +80,7 @@ func TestListar_MaisRecentePrimeiro(t *testing.T) {
 
 	lista := a.Listar()
 	if lista[0].Texto != "30 netflix" || lista[2].Texto != "10 mercado" {
-		t.Errorf("ordem = %q, %q, %q; quero o mais recente primeiro",
+		t.Errorf("order = %q, %q, %q; want newest first",
 			lista[0].Texto, lista[1].Texto, lista[2].Texto)
 	}
 }
@@ -93,7 +93,7 @@ func TestListar_DevolveCopia(t *testing.T) {
 
 	a.Listar()[0].Texto = "adulterado"
 	if a.Listar()[0].Texto != "10 mercado" {
-		t.Error("mexer no slice devolvido alterou o estado interno")
+		t.Error("changing the returned slice altered internal state")
 	}
 }
 
@@ -109,15 +109,15 @@ func TestRemover(t *testing.T) {
 
 	lista := abrir(t, p).Listar()
 	if len(lista) != 1 || lista[0].ID != r2.ID {
-		t.Errorf("depois de remover e reabrir: %+v, quero so o ID %d", lista, r2.ID)
+		t.Errorf("after removing and reopening: %+v, want only ID %d", lista, r2.ID)
 	}
 
 	if err := a.Remover(r1.ID); !errors.Is(err, armazem.ErrNaoEncontrado) {
-		t.Errorf("remover de novo: erro = %v, quero ErrNaoEncontrado", err)
+		t.Errorf("removing again: error = %v, want ErrNaoEncontrado", err)
 	}
 }
 
-// ID reaproveitado faria um DELETE atrasado apagar o registro errado.
+// A reused ID would let a delayed DELETE remove the wrong record.
 func TestIDNuncaEReaproveitado(t *testing.T) {
 	p := caminho(t)
 	a := abrir(t, p)
@@ -129,12 +129,12 @@ func TestIDNuncaEReaproveitado(t *testing.T) {
 
 	r3, _ := abrir(t, p).Adicionar("30 netflix", lanc(t, "30 netflix"))
 	if r3.ID == r1.ID || r3.ID == r2.ID {
-		t.Errorf("ID %d reaproveitado (existentes/removidos: %d, %d)", r3.ID, r1.ID, r2.ID)
+		t.Errorf("ID %d reused (existing/removed: %d, %d)", r3.ID, r1.ID, r2.ID)
 	}
 }
 
-// Arquivo ilegivel nao pode virar "comecar vazio": o proximo Adicionar
-// sobrescreveria o arquivo e apagaria tudo o que estava la.
+// An unreadable file must not become "start empty": the next Adicionar would
+// overwrite the file and erase everything in it.
 func TestAbrir_ArquivoCorrompidoFalhaEmVezDeZerar(t *testing.T) {
 	p := caminho(t)
 	if err := os.WriteFile(p, []byte("{nao e json"), 0o600); err != nil {
@@ -142,10 +142,10 @@ func TestAbrir_ArquivoCorrompidoFalhaEmVezDeZerar(t *testing.T) {
 	}
 
 	if _, err := armazem.Abrir(p); err == nil {
-		t.Fatal("Abrir de arquivo corrompido devia falhar")
+		t.Fatal("Abrir of a corrupted file should fail")
 	}
 	if b, _ := os.ReadFile(filepath.Clean(p)); string(b) != "{nao e json" {
-		t.Error("Abrir alterou o arquivo corrompido; devia deixa-lo intacto para recuperacao")
+		t.Error("Abrir changed the corrupted file; it should leave it untouched for recovery")
 	}
 }
 
@@ -158,12 +158,12 @@ func TestGravacao_NaoDeixaTemporarioENaoExpoeAOutros(t *testing.T) {
 
 	entradas, _ := os.ReadDir(filepath.Dir(p))
 	if len(entradas) != 1 {
-		t.Errorf("diretorio tem %d arquivos, quero so o de dados (temporario esquecido?)", len(entradas))
+		t.Errorf("directory has %d files, want only the data file (leftover temp file?)", len(entradas))
 	}
 }
 
-// Handlers HTTP rodam em paralelo. Sem trava, gravacoes simultaneas perdem
-// lancamentos -- e o -race do CI acusa a corrida.
+// HTTP handlers run in parallel. Without a lock, concurrent writes lose
+// entries -- and CI's -race flags the data race.
 func TestAdicionar_Concorrente(t *testing.T) {
 	p := caminho(t)
 	a := abrir(t, p)
@@ -181,28 +181,28 @@ func TestAdicionar_Concorrente(t *testing.T) {
 	wg.Wait()
 
 	if n := len(abrir(t, p).Listar()); n != 50 {
-		t.Errorf("%d registros persistidos, quero 50", n)
+		t.Errorf("%d records persisted, want 50", n)
 	}
 }
 
 func TestAbrir_ErroDeLeituraNaoViraVazio(t *testing.T) {
-	// Um diretorio no lugar do arquivo: existe, mas nao da para ler.
+	// A directory where the file should be: it exists but cannot be read.
 	if _, err := armazem.Abrir(t.TempDir()); err == nil {
-		t.Fatal("Abrir de caminho ilegivel devia falhar, nao comecar vazio")
+		t.Fatal("Abrir of an unreadable path should fail, not start empty")
 	}
 }
 
-// Se o disco recusa a gravacao, memoria e disco tem que continuar iguais.
-// Senao a tela mostra um lancamento que sumira no proximo reinicio.
+// If the disk refuses the write, memory and disk must stay the same. Otherwise
+// the screen shows an entry that will vanish on the next restart.
 func TestAdicionar_FalhaDeGravacaoNaoAlteraMemoria(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "nao-existe", "dados.json")
 	a := abrir(t, p)
 
 	if _, err := a.Adicionar("10 mercado", lanc(t, "10 mercado")); err == nil {
-		t.Fatal("Adicionar em diretorio inexistente devia falhar")
+		t.Fatal("Adicionar into a missing directory should fail")
 	}
 	if n := len(a.Listar()); n != 0 {
-		t.Errorf("memoria tem %d registros apos falha de gravacao, quero 0", n)
+		t.Errorf("memory has %d records after a failed write, want 0", n)
 	}
 }
 
@@ -211,7 +211,7 @@ func TestRemover_FalhaDeGravacaoNaoAlteraMemoria(t *testing.T) {
 	a := abrir(t, p)
 	r, _ := a.Adicionar("10 mercado", lanc(t, "10 mercado"))
 
-	// Troca o arquivo por um diretorio: o rename final passa a falhar.
+	// Replace the file with a directory: the final rename now fails.
 	if err := os.Remove(p); err != nil {
 		t.Fatal(err)
 	}
@@ -220,9 +220,9 @@ func TestRemover_FalhaDeGravacaoNaoAlteraMemoria(t *testing.T) {
 	}
 
 	if err := a.Remover(r.ID); err == nil {
-		t.Fatal("Remover devia falhar quando o rename falha")
+		t.Fatal("Remover should fail when the rename fails")
 	}
 	if n := len(a.Listar()); n != 1 {
-		t.Errorf("memoria tem %d registros apos falha de gravacao, quero 1", n)
+		t.Errorf("memory has %d records after a failed write, want 1", n)
 	}
 }

@@ -1,8 +1,8 @@
-// Package armazem guarda os lancamentos num arquivo JSON local.
+// Package armazem stores entries in a local JSON file.
 //
-// ponytail: um arquivo JSON inteiro reescrito a cada mudanca. Serve bem para os
-// milhares de lancamentos de uma pessoa; acima de ~5MB ou com lentidao, troca por
-// SQLite (gatilho 3 do ADR-0001).
+// ponytail: one JSON file rewritten in full on every change. It handles the
+// thousands of entries of one person well; above ~5MB or once it feels slow,
+// switch to SQLite (trigger 3 of ADR-0001).
 package armazem
 
 import (
@@ -17,13 +17,14 @@ import (
 	"github.com/augustodbatista/finance-platform/api/internal/parser"
 )
 
-// ErrNaoEncontrado indica ID que nao existe (ou ja foi removido).
-var ErrNaoEncontrado = errors.New("armazem: lancamento nao encontrado")
+// ErrNaoEncontrado reports an ID that does not exist (or was already removed).
+var ErrNaoEncontrado = errors.New("armazem: entry not found")
 
-// Registro e um lancamento salvo, com o texto que o usuario digitou.
+// Registro is a saved entry, together with the text the user typed.
 //
-// O texto original e guardado porque e a melhor descricao que existe: o usuario
-// reconhece "almoco com o time 42,50" na lista, nao "Alimentacao R$ 42,50".
+// The original text is kept because it is the best description there is: the
+// user recognizes "almoco com o time 42,50" in the list, not "Alimentacao
+// R$ 42,50".
 type Registro struct {
 	ID         int64             `json:"id"`
 	Texto      string            `json:"texto"`
@@ -31,25 +32,25 @@ type Registro struct {
 }
 
 type conteudo struct {
-	// ProximoID persiste separado do maior ID existente: sem ele, remover o
-	// ultimo registro e reabrir faria o ID ser reaproveitado, e um DELETE
-	// atrasado apagaria o registro errado.
+	// ProximoID is persisted separately from the highest existing ID: without
+	// it, removing the last record and reopening would reuse the ID, and a
+	// delayed DELETE would remove the wrong record.
 	ProximoID int64      `json:"proximo_id"`
 	Registros []Registro `json:"registros"`
 }
 
-// Armazem e seguro para uso concorrente.
+// Armazem is safe for concurrent use.
 type Armazem struct {
 	mu      sync.Mutex
 	caminho string
 	dados   conteudo
 }
 
-// Abrir carrega o arquivo, ou comeca vazio se ele nao existir.
+// Abrir loads the file, or starts empty if it does not exist.
 //
-// Arquivo que existe mas nao e JSON valido e erro, nunca "comecar vazio": o
-// proximo Adicionar sobrescreveria o arquivo e apagaria tudo o que estava la.
-// O arquivo fica intacto para recuperacao manual.
+// A file that exists but is not valid JSON is an error, never "start empty":
+// the next Adicionar would overwrite the file and erase everything in it. The
+// file is left untouched for manual recovery.
 func Abrir(caminho string) (*Armazem, error) {
 	a := &Armazem{caminho: filepath.Clean(caminho), dados: conteudo{ProximoID: 1}}
 
@@ -58,15 +59,15 @@ func Abrir(caminho string) (*Armazem, error) {
 		return a, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("armazem: lendo %s: %w", a.caminho, err)
+		return nil, fmt.Errorf("armazem: reading %s: %w", a.caminho, err)
 	}
 	if err := json.Unmarshal(b, &a.dados); err != nil {
-		return nil, fmt.Errorf("armazem: %s nao e JSON valido (arquivo mantido intacto): %w", a.caminho, err)
+		return nil, fmt.Errorf("armazem: %s is not valid JSON (file left untouched): %w", a.caminho, err)
 	}
 	return a, nil
 }
 
-// Adicionar grava um lancamento novo e devolve o registro com ID.
+// Adicionar saves a new entry and returns the record with its ID.
 func (a *Armazem) Adicionar(texto string, l parser.Lancamento) (Registro, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -83,7 +84,7 @@ func (a *Armazem) Adicionar(texto string, l parser.Lancamento) (Registro, error)
 	return r, nil
 }
 
-// Listar devolve uma copia dos registros, do mais recente para o mais antigo.
+// Listar returns a copy of the records, newest first.
 func (a *Armazem) Listar() []Registro {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -93,7 +94,7 @@ func (a *Armazem) Listar() []Registro {
 	return rs
 }
 
-// Remover apaga o registro com o ID informado.
+// Remover deletes the record with the given ID.
 func (a *Armazem) Remover(id int64) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -113,42 +114,42 @@ func (a *Armazem) Remover(id int64) error {
 	return nil
 }
 
-// gravar escreve de forma atomica: arquivo temporario no mesmo diretorio e
-// rename por cima. Uma queda no meio da escrita deixa o arquivo antigo inteiro,
-// nunca um arquivo pela metade. O estado em memoria so muda depois que o disco
-// confirmou -- se gravar falha, memoria e disco continuam iguais.
+// gravar writes atomically: a temporary file in the same directory, renamed
+// over the target. A crash mid-write leaves the old file whole, never a
+// half-written one. In-memory state only changes after the disk has confirmed
+// -- if gravar fails, memory and disk stay the same.
 //
-// Permissao 0600: sao dados financeiros, ninguem alem do dono le.
+// Permission 0600: this is financial data, nobody but the owner reads it.
 func (a *Armazem) gravar(c conteudo) error {
 	b, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
-		return fmt.Errorf("armazem: serializando: %w", err)
+		return fmt.Errorf("armazem: encoding: %w", err)
 	}
 
 	tmp, err := os.CreateTemp(filepath.Dir(a.caminho), ".dados-*.tmp")
 	if err != nil {
-		return fmt.Errorf("armazem: criando temporario: %w", err)
+		return fmt.Errorf("armazem: creating temp file: %w", err)
 	}
-	// Depois de um rename bem-sucedido o temporario ja nao existe e o Remove
-	// falha de proposito; o erro nao carrega informacao, por isso e descartado.
+	// After a successful rename the temp file no longer exists and Remove fails
+	// on purpose; that error carries no information, so it is discarded.
 	defer func() { _ = os.Remove(tmp.Name()) }()
 
-	// errors.Join em vez de ignorar o Close: se as duas coisas falharem, as
-	// duas aparecem no log.
+	// errors.Join instead of ignoring Close: if both fail, both show up in the
+	// log.
 	if _, err := tmp.Write(b); err != nil {
-		return errors.Join(fmt.Errorf("armazem: escrevendo temporario: %w", err), tmp.Close())
+		return errors.Join(fmt.Errorf("armazem: writing temp file: %w", err), tmp.Close())
 	}
 	if err := tmp.Sync(); err != nil {
-		return errors.Join(fmt.Errorf("armazem: sincronizando temporario: %w", err), tmp.Close())
+		return errors.Join(fmt.Errorf("armazem: syncing temp file: %w", err), tmp.Close())
 	}
 	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("armazem: fechando temporario: %w", err)
+		return fmt.Errorf("armazem: closing temp file: %w", err)
 	}
 	if err := os.Chmod(tmp.Name(), 0o600); err != nil {
-		return fmt.Errorf("armazem: ajustando permissao: %w", err)
+		return fmt.Errorf("armazem: setting permissions: %w", err)
 	}
 	if err := os.Rename(tmp.Name(), a.caminho); err != nil {
-		return fmt.Errorf("armazem: substituindo %s: %w", a.caminho, err)
+		return fmt.Errorf("armazem: replacing %s: %w", a.caminho, err)
 	}
 	return nil
 }
