@@ -1,13 +1,13 @@
-// Package resumo agrega lancamentos nos numeros que o dashboard mostra.
+// Package resumo aggregates entries into the numbers the dashboard shows.
 //
-// E dominio puro: sem I/O, sem banco, sem rede.
+// Pure domain: no I/O, no database, no network.
 //
-// A regra que justifica o pacote existir nao e a soma, e a diferenca entre dois
-// numeros que parecem o mesmo: despesa a vista pesa no dia em que aconteceu,
-// despesa no credito pesa na fatura em que cai. Uma compra parcelada feita hoje
-// aparece em varios meses; uma compra no debito feita hoje aparece so neste.
-// Somar os dois pela data da compra e a forma mais facil de mostrar um numero
-// errado com cara de certo.
+// The rule that justifies this package is not the sum, it is the difference
+// between two numbers that look the same: a cash/debit expense weighs on the
+// day it happened, a credit card expense weighs on the statement it lands on.
+// An installment purchase made today shows up in several months; a debit
+// purchase made today shows up only in this one. Summing both by purchase date
+// is the easiest way to show a wrong number that looks right.
 package resumo
 
 import (
@@ -17,28 +17,29 @@ import (
 	"github.com/augustodbatista/finance-platform/api/internal/parser"
 )
 
-// Resumo sao os numeros de um mes.
+// Resumo holds the numbers for one month.
 //
-// ponytail: sem "Saldo atual" ainda. Saldo exige saldo inicial e o pagamento da
-// fatura modelado como lancamento -- nenhum dos dois existe. Entra no slice que
-// trouxer conta e pagamento de fatura.
+// ponytail: no "current balance" yet. A balance needs an opening balance and
+// statement payments modeled as entries -- neither exists. It arrives with the
+// slice that introduces accounts and statement payments.
 type Resumo struct {
 	ReceitasCentavos int64
 	DespesasCentavos int64
-	// EconomiaCentavos e receitas menos despesas. Fica negativo em mes que so
-	// tem fatura para pagar, e isso e informacao, nao erro.
+	// EconomiaCentavos is income minus expenses. It goes negative in a month
+	// that only has a statement to pay, and that is information, not an error.
 	EconomiaCentavos int64
 }
 
-// Mensal soma os lancamentos que pertencem a competencia informada.
+// Mensal sums the entries that belong to the given month.
 //
-// Receita conta no mes da data e ignora fatura e parcelas: cartao de credito e
-// forma de gastar, nao de receber.
+// Income counts in the month of its date and ignores statements and
+// installments: a credit card is a way of spending, not of receiving.
 //
-// Despesa no credito conta na competencia de cada parcela; nas demais formas,
-// no mes da data da compra. FormaNaoInformada cai no mes da data -- o parser
-// nao inventa forma, e tratar o desconhecido como credito adiaria dinheiro que
-// talvez ja tenha saido.
+// A credit card expense counts on each installment's statement; any other
+// payment method counts in the month of the purchase date. FormaNaoInformada
+// (method not stated) counts in the month of the date -- the parser does not
+// invent a payment method, and treating the unknown as credit would postpone
+// money that may already have left the account.
 func Mensal(mes fatura.Competencia, lancamentos []parser.Lancamento, diaFechamento int) (Resumo, error) {
 	var r Resumo
 
@@ -72,7 +73,7 @@ func Mensal(mes fatura.Competencia, lancamentos []parser.Lancamento, diaFechamen
 	return r, nil
 }
 
-// noMes diz se a data cai na competencia.
+// noMes reports whether the date falls in the given month.
 func noMes(data time.Time, mes fatura.Competencia) bool {
 	return data.Year() == mes.Ano && data.Month() == mes.Mes
 }

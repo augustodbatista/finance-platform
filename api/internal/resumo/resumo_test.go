@@ -20,22 +20,22 @@ func comp(ano int, mes time.Month) fatura.Competencia {
 	return fatura.Competencia{Ano: ano, Mes: mes}
 }
 
-// lancamentos monta o mesmo conjunto para todos os testes: um mes com receita,
-// despesa a vista, compra parcelada no credito, um lancamento do mes anterior e
-// uma compra feita no proprio dia do fechamento.
+// lancamentos builds the same set for every test: a month with income, a debit
+// expense, a credit card installment purchase, an entry from the previous month
+// and a purchase made on the closing day itself.
 func lancamentos() []parser.Lancamento {
 	return []parser.Lancamento{
 		{Centavos: 350000, Categoria: parser.Salario, Tipo: parser.Receita,
 			Data: dia(2026, time.July, 5), Forma: parser.Pix, Parcelas: 1},
 		{Centavos: 12000, Categoria: parser.Mercado, Tipo: parser.Despesa,
 			Data: dia(2026, time.July, 5), Forma: parser.Debito, Parcelas: 1},
-		// R$ 300 em 3x no credito: R$ 100 em julho, agosto e setembro.
+		// R$ 300 in 3 credit installments: R$ 100 in July, August and September.
 		{Centavos: 30000, Categoria: parser.Casa, Tipo: parser.Despesa,
 			Data: dia(2026, time.July, 5), Forma: parser.Credito, Parcelas: 3},
-		// Mes anterior: nao pode vazar para julho.
+		// Previous month: must not leak into July.
 		{Centavos: 1800, Categoria: parser.Transporte, Tipo: parser.Despesa,
 			Data: dia(2026, time.June, 10), Forma: parser.Debito, Parcelas: 1},
-		// Credito no proprio dia do fechamento: cai em agosto, nao em julho.
+		// Credit purchase on the closing day: lands in August, not July.
 		{Centavos: 20000, Categoria: parser.Lazer, Tipo: parser.Despesa,
 			Data: dia(2026, time.July, 28), Forma: parser.Credito, Parcelas: 1},
 	}
@@ -49,44 +49,44 @@ func TestMensal(t *testing.T) {
 		queroDespesas int64
 		queroEconomia int64
 	}{
-		// Julho: salario 3500; despesas = mercado 120 (debito, conta no dia) +
-		// primeira parcela da compra parcelada (100). A compra do dia 28 nao
-		// entra: a fatura dela e agosto.
-		{"julho", comp(2026, time.July), 350000, 22000, 328000},
-		// Agosto: so faturas. Parcela 2 da compra parcelada (100) + a compra
-		// feita no dia do fechamento de julho (200).
-		{"agosto", comp(2026, time.August), 0, 30000, -30000},
-		// Setembro: so a ultima parcela.
-		{"setembro", comp(2026, time.September), 0, 10000, -10000},
-		// Junho: so o uber a debito.
-		{"junho", comp(2026, time.June), 0, 1800, -1800},
-		{"mes sem nada", comp(2026, time.November), 0, 0, 0},
+		// July: salary 3500; expenses = groceries 120 (debit, counts on the
+		// day) + first installment of the credit purchase (100). The purchase
+		// on the 28th is not included: its statement is August's.
+		{"july", comp(2026, time.July), 350000, 22000, 328000},
+		// August: statements only. Installment 2 of the credit purchase (100)
+		// + the purchase made on July's closing day (200).
+		{"august", comp(2026, time.August), 0, 30000, -30000},
+		// September: only the last installment.
+		{"september", comp(2026, time.September), 0, 10000, -10000},
+		// June: only the debit ride.
+		{"june", comp(2026, time.June), 0, 1800, -1800},
+		{"empty month", comp(2026, time.November), 0, 0, 0},
 	}
 
 	for _, c := range casos {
 		t.Run(c.nome, func(t *testing.T) {
 			got, err := resumo.Mensal(c.mes, lancamentos(), fechamento)
 			if err != nil {
-				t.Fatalf("Mensal retornou erro inesperado: %v", err)
+				t.Fatalf("Mensal returned unexpected error: %v", err)
 			}
 			if got.ReceitasCentavos != c.queroReceitas {
-				t.Errorf("Receitas = %d, quero %d", got.ReceitasCentavos, c.queroReceitas)
+				t.Errorf("income = %d, want %d", got.ReceitasCentavos, c.queroReceitas)
 			}
 			if got.DespesasCentavos != c.queroDespesas {
-				t.Errorf("Despesas = %d, quero %d", got.DespesasCentavos, c.queroDespesas)
+				t.Errorf("expenses = %d, want %d", got.DespesasCentavos, c.queroDespesas)
 			}
 			if got.EconomiaCentavos != c.queroEconomia {
-				t.Errorf("Economia = %d, quero %d", got.EconomiaCentavos, c.queroEconomia)
+				t.Errorf("savings = %d, want %d", got.EconomiaCentavos, c.queroEconomia)
 			}
 		})
 	}
 }
 
-// A despesa a vista conta no dia; a no credito conta na fatura. Sao dois
-// numeros diferentes, e confundi-los e o erro que este pacote existe para
-// evitar.
+// A debit expense counts on the day; a credit one counts on its statement.
+// They are two different numbers, and mixing them up is the bug this package
+// exists to prevent.
 func TestMensal_CreditoContaNaFaturaEDebitoNoDia(t *testing.T) {
-	compra := dia(2026, time.July, 29) // depois do fechamento dia 28
+	compra := dia(2026, time.July, 29) // after closing day 28
 
 	debito := []parser.Lancamento{{Centavos: 5000, Tipo: parser.Despesa,
 		Data: compra, Forma: parser.Debito, Parcelas: 1}}
@@ -96,28 +96,28 @@ func TestMensal_CreditoContaNaFaturaEDebitoNoDia(t *testing.T) {
 	julho, agosto := comp(2026, time.July), comp(2026, time.August)
 
 	if r, _ := resumo.Mensal(julho, debito, fechamento); r.DespesasCentavos != 5000 {
-		t.Errorf("debito em julho = %d, quero 5000", r.DespesasCentavos)
+		t.Errorf("debit in July = %d, want 5000", r.DespesasCentavos)
 	}
 	if r, _ := resumo.Mensal(julho, credito, fechamento); r.DespesasCentavos != 0 {
-		t.Errorf("credito em julho = %d, quero 0: a fatura e agosto", r.DespesasCentavos)
+		t.Errorf("credit in July = %d, want 0: its statement is August's", r.DespesasCentavos)
 	}
 	if r, _ := resumo.Mensal(agosto, credito, fechamento); r.DespesasCentavos != 5000 {
-		t.Errorf("credito em agosto = %d, quero 5000", r.DespesasCentavos)
+		t.Errorf("credit in August = %d, want 5000", r.DespesasCentavos)
 	}
 }
 
-// Receita nao passa por fatura: salario no dia 29 e receita de julho mesmo com
-// fechamento dia 28. Cartao de credito e forma de gastar, nao de receber.
+// Income does not go through statements: a salary on the 29th is July income
+// even with closing day 28. A credit card is a way of spending, not receiving.
 func TestMensal_ReceitaIgnoraFatura(t *testing.T) {
 	ls := []parser.Lancamento{{Centavos: 350000, Tipo: parser.Receita,
 		Data: dia(2026, time.July, 29), Forma: parser.Credito, Parcelas: 3}}
 
 	got, err := resumo.Mensal(comp(2026, time.July), ls, fechamento)
 	if err != nil {
-		t.Fatalf("Mensal retornou erro inesperado: %v", err)
+		t.Fatalf("Mensal returned unexpected error: %v", err)
 	}
 	if got.ReceitasCentavos != 350000 {
-		t.Errorf("Receitas = %d, quero 350000 (inteiras, no mes da data)", got.ReceitasCentavos)
+		t.Errorf("income = %d, want 350000 (in full, in the month of its date)", got.ReceitasCentavos)
 	}
 }
 
@@ -126,6 +126,6 @@ func TestMensal_PropagaErroDeFatura(t *testing.T) {
 		Data: dia(2026, time.July, 5), Forma: parser.Credito, Parcelas: 3}}
 
 	if _, err := resumo.Mensal(comp(2026, time.July), ls, 0); !errors.Is(err, fatura.ErrDiaFechamentoInvalido) {
-		t.Errorf("erro = %v, quero ErrDiaFechamentoInvalido", err)
+		t.Errorf("error = %v, want ErrDiaFechamentoInvalido", err)
 	}
 }
