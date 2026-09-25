@@ -1,59 +1,92 @@
-# RFC-0001: Escolha da Stack Tecnológica Core
+# RFC-0001: Core Technology Stack
 
-**Status:** Aprovado
-**Data:** 03 de Julho de 2026
-**Autor:** Tech Lead / Arquitetura
+**Status:** Approved
+**Date:** July 3, 2026
+**Author:** Tech Lead / Architecture
 **Tags:** `architecture`, `stack`, `decisions`
 
-## 1. Contexto e Problema
-O projeto requer a fundação de uma plataforma financeira robusta, escalável e de longo prazo. Precisamos definir as tecnologias core que suportarão o desenvolvimento desde a fase de MVP até futuras integrações com inteligência artificial, garantindo alta performance no backend e alcance multiplataforma no frontend, sem gerar custos iniciais proibitivos.
+> **Current deviation:** the MVP runs as a single Go binary with an HTML page and
+> a JSON file instead of Flutter + PostgreSQL. See
+> [ADR-0001](adr-0001-mvp-binario-go.md), which also lists the triggers for
+> returning to this stack.
 
-## 2. Critérios de Decisão
-* **Time-to-market do MVP:** Tecnologias que permitam iterações rápidas.
-* **Escalabilidade e Performance:** Capacidade de lidar com alto volume de transações e concorrência (foco em arquitetura financeira).
-* **Alcance Multiplataforma:** Menor esforço para entregar versões em diferentes sistemas operacionais.
-* **Curva de Aprendizado e Valor de Portfólio:** Adoção de ferramentas altamente valorizadas pelo mercado de backend e engenharia de software moderna.
-* **Pragmatismo de Custos:** Ferramentas gratuitas ou de baixíssimo custo para a fase inicial, com caminho claro para migração.
+## 1. Context and Problem
 
-## 3. Opções Consideradas e Decisões
+The project needs the foundation of a robust, scalable, long-lived finance
+platform. We must define the core technologies that will carry development from
+the MVP to future AI integrations, with high backend performance and
+cross-platform reach on the frontend, without prohibitive upfront costs.
 
-### 3.1. Frontend: Mobile, Desktop e Web
-* **Opções:** React Native, Kotlin Multiplatform, Flutter.
-* **Decisão:** **Flutter.**
-* **Justificativa:** Permite uma base de código única para Android, iOS, Windows, Linux, macOS e Web. O ecossistema suporta bem estratégias offline-first (como Drift/SQLite), essenciais para aplicativos financeiros onde o usuário pode não ter conexão no momento do gasto.
+## 2. Decision Criteria
 
-### 3.2. Backend: Linguagem e Framework
-* **Opções:** Java (Spring Boot), Node.js, Go.
-* **Decisão:** **Go.**
-* **Justificativa:** Oferece vantagens incomparáveis para este projeto: compilação em binário único, tempo de inicialização quase zero e manipulação nativa de concorrência. É o padrão da indústria para infraestrutura e fintechs modernas, garantindo uma arquitetura limpa e de altíssima performance.
+* **MVP time-to-market:** technologies that allow fast iteration.
+* **Scalability and performance:** able to handle high transaction volume and
+  concurrency (a finance-oriented architecture).
+* **Cross-platform reach:** least effort to ship on different operating systems.
+* **Learning curve and portfolio value:** tools highly valued in the backend and
+  modern software engineering market.
+* **Cost pragmatism:** free or very low-cost tools for the initial phase, with a
+  clear migration path.
 
-### 3.3. Banco de Dados e ORM
-* **Opções:** MySQL, MongoDB, PostgreSQL.
-* **Decisão:** **PostgreSQL + GORM (MVP).**
-* **Justificativa:** O PostgreSQL é a escolha definitiva para integridade de dados financeiros, com suporte avançado a JSONB e modelagem relacional rigorosa. Para o MVP, o GORM acelerará a entrega do CRUD.
-* **Alternativa Futura:** Migração para **SQLC** quando o sistema exigir queries altamente otimizadas e type-safety rigoroso direto do SQL puro.
+## 3. Options Considered and Decisions
 
-### 3.4. Autenticação e Storage
-* **Opções:** Firebase, AWS Cognito, Autenticação Própria (JWT), Supabase.
-* **Decisão:** **Supabase (Auth e Storage).**
-* **Justificativa:** Reduz drasticamente a complexidade de gerenciar sessões e redefinições de senha no MVP. Totalmente compatível com a escolha do PostgreSQL.
-* **Alternativa Futura:** Implementação de JWT proprietário se houver necessidade de isolamento total de dependências de terceiros.
+### 3.1. Frontend: Mobile, Desktop and Web
+* **Options:** React Native, Kotlin Multiplatform, Flutter.
+* **Decision:** **Flutter.**
+* **Rationale:** a single codebase for Android, iOS, Windows, Linux, macOS and
+  Web. The ecosystem supports offline-first strategies well (such as
+  Drift/SQLite), which matter for finance apps where the user may be offline at
+  the moment of spending.
 
-### 3.5. Estratégia de Parsing (Extração de Dados)
-* **Opções:** Integração direta com LLM (OpenAI/Gemini) vs. Parser baseado em Regras.
-* **Decisão:** **Parser baseado em Regex/Regras no MVP.**
-* **Justificativa:** Pragmatismo financeiro e de engenharia. Utilizar LLMs para categorizar cada despesa simples gera latência e custo por token desnecessários. O fluxo será: `Entrada -> Regex -> Regras do Banco`.
-* **Alternativa Futura:** Implementação de interface plugável para LLMs (IA Analytics) para lidar com entradas complexas e análises financeiras descritivas.
+### 3.2. Backend: Language and Framework
+* **Options:** Java (Spring Boot), Node.js, Go.
+* **Decision:** **Go.**
+* **Rationale:** single-binary compilation, near-zero startup time and native
+  concurrency. It is an industry standard for infrastructure and modern
+  fintechs, and supports a clean, high-performance architecture.
 
-### 3.6. Hospedagem, Deploy e Observabilidade
-* **Opções:** AWS (EC2/ECS), Vercel, Railway/Render.
-* **Decisão:** **Railway ou Render (Backend) + Supabase (Banco).**
-* **Observabilidade:** Implementação desde o dia zero de logs estruturados e health checks na API Go.
-* **Justificativa:** Foco em DX (Developer Experience). CI/CD automatizado via GitHub Actions conectando diretamente no Railway permite focar no código, não na infraestrutura, durante os primeiros meses.
+### 3.3. Database and ORM
+* **Options:** MySQL, MongoDB, PostgreSQL.
+* **Decision:** **PostgreSQL + GORM (MVP).**
+* **Rationale:** PostgreSQL is the definitive choice for financial data
+  integrity, with advanced JSONB support and rigorous relational modeling. For
+  the MVP, GORM speeds up CRUD delivery.
+* **Future alternative:** migrate to **SQLC** when the system needs highly
+  optimized queries and strict type safety straight from SQL.
 
-## 4. Riscos e Mitigações
-* **Risco:** Ecossistema de bibliotecas do Go ser menor que o do Java para integrações específicas.
-  * **Mitigação:** Isolar integrações externas atrás de interfaces no Go, permitindo criar clientes próprios de forma limpa caso não exista uma biblioteca oficial.
-* **Risco:** Lock-in com Supabase Auth.
-  * **Mitigação:** O design do backend não deve acoplar o ID do usuário diretamente à regra de negócio sem uma camada de abstração (ex: usar UUIDs internos mapeados para o ID do Supabase).
-  *
+### 3.4. Authentication and Storage
+* **Options:** Firebase, AWS Cognito, in-house auth (JWT), Supabase.
+* **Decision:** **Supabase (Auth and Storage).**
+* **Rationale:** drastically reduces the complexity of managing sessions and
+  password resets in the MVP. Fully compatible with the PostgreSQL choice.
+* **Future alternative:** in-house JWT if full isolation from third-party
+  dependencies becomes necessary.
+
+### 3.5. Parsing Strategy (Data Extraction)
+* **Options:** direct LLM integration (OpenAI/Gemini) vs. a rule-based parser.
+* **Decision:** **Regex/rule-based parser in the MVP.**
+* **Rationale:** financial and engineering pragmatism. Using LLMs to categorize
+  every simple expense adds unnecessary latency and per-token cost. The flow is:
+  `Input -> Regex -> Rules`.
+* **Future alternative:** a pluggable interface for LLMs (AI analytics) to handle
+  complex inputs and descriptive financial analysis.
+
+### 3.6. Hosting, Deployment and Observability
+* **Options:** AWS (EC2/ECS), Vercel, Railway/Render.
+* **Decision:** **Railway or Render (backend) + Supabase (database).**
+* **Observability:** structured logs and health checks in the Go API from day
+  zero.
+* **Rationale:** focus on developer experience. CI/CD via GitHub Actions
+  connected straight to Railway keeps the focus on code, not infrastructure,
+  during the first months.
+
+## 4. Risks and Mitigations
+
+* **Risk:** Go's library ecosystem is smaller than Java's for some specific
+  integrations.
+  * **Mitigation:** isolate external integrations behind interfaces in Go, so
+    in-house clients can be written cleanly when no official library exists.
+* **Risk:** lock-in with Supabase Auth.
+  * **Mitigation:** the backend must not couple the user ID directly to business
+    rules without an abstraction layer (e.g. internal UUIDs mapped to the
+    Supabase ID).

@@ -1,49 +1,52 @@
-# ADR-0001: MVP como binário Go + página HTML + arquivo JSON
+# ADR-0001: MVP as a Go binary + HTML page + JSON file
 
-**Status:** Aceito
-**Data:** 25 de setembro de 2026
-**Decisor:** Augusto
-**Desvia de:** [RFC-0001](rfc-0001-escolha-da-stack.md), seções 3.1 (Flutter) e 3.3 (PostgreSQL)
+**Status:** Accepted
+**Date:** September 25, 2026
+**Decided by:** Augusto
+**Deviates from:** [RFC-0001](rfc-0001-escolha-da-stack.md), sections 3.1 (Flutter) and 3.3 (PostgreSQL)
 
-## Contexto
+## Context
 
-O domínio (parser, fatura, resumo) está pronto e 100% coberto desde julho, mas
-ninguém registrou um gasto de verdade ainda. A tese do produto — atrito mata
-hábito — continua sem teste com usuário real. O objetivo agora é ter o MVP em uso
-o mais rápido possível.
+The domain (parser, statements, monthly summary) had been done and fully covered
+by tests since July, but nobody had recorded a real expense with it yet. The
+product thesis -- friction kills habit -- was still untested with a real user.
+The goal now is to have the MVP in use as fast as possible.
 
-O caminho do RFC-0001 exige instalar o SDK do Flutter (~3GB, sem pacote winget),
-modelar persistência com Drift e, para sync, subir API + Postgres + Supabase.
-São semanas até o primeiro lançamento real.
+The RFC-0001 path requires installing the Flutter SDK (~3GB, no winget
+package), modeling persistence with Drift and, for sync, running an API +
+PostgreSQL + Supabase. That is weeks before the first real entry.
 
-## Decisão
+## Decision
 
-Para o MVP:
+For the MVP:
 
-- **Um binário Go** em `api/cmd/app`, que reusa `parser`, `fatura` e `resumo`
-  sem alteração.
-- **Uma página HTML** embutida no binário (`embed`), JS puro, sem framework.
-  Instalável na tela inicial do celular pelo próprio navegador.
-- **Persistência em um arquivo JSON**, com escrita atômica (arquivo temporário
-  + rename) para que uma queda no meio da gravação não corrompa os dados.
-- **Um cartão só**, com dia de fechamento vindo de variável de ambiente.
+- **One Go binary** in `api/cmd/app`, reusing `parser`, `fatura` and `resumo`
+  unchanged.
+- **One HTML page** embedded in the binary (`embed`), plain JavaScript, no
+  framework. It can be installed on the phone's home screen from the browser.
+- **Persistence in one JSON file**, with atomic writes (temporary file +
+  rename) so a crash mid-write cannot corrupt the data.
+- **A single credit card**, with its closing day from an environment variable.
 
-Nenhuma dependência externa: `go.sum` continua vazio.
+No external dependencies: `go.sum` stays empty.
 
-## Consequências
+## Consequences
 
-- Roda no PC; o celular acessa pela rede local. **Sem o PC ligado, não há app.**
-- Acesso pela rede exige senha (Basic Auth nativo do navegador). Sem TLS, a senha
-  trafega em claro na rede local: aceitável na rede de casa, **inaceitável** em
-  rede pública ou exposto à internet.
-- Um usuário só. Não há multiusuário, sync nem backup automático — o backup é
-  copiar o arquivo JSON.
+- It runs on the PC; the phone reaches it over the local network. **With the PC
+  off, there is no app.**
+- Network access requires a password (the browser's native Basic Auth). Without
+  TLS the password travels in clear text on the local network: acceptable on a
+  home network, **unacceptable** on a public network or exposed to the internet.
+- A single user. No multi-user support, sync or automatic backup -- backing up
+  means copying the JSON file.
 
-## Gatilhos para voltar ao RFC-0001
+## Triggers for returning to RFC-0001
 
-Qualquer um destes reabre a decisão:
+Any of these reopens the decision:
 
-1. Precisar usar o app com o PC desligado ou fora de casa → app nativo/Flutter.
-2. Mais de um usuário → API com auth de verdade + Postgres.
-3. Arquivo JSON acima de ~5MB ou lentidão perceptível → SQLite.
-4. Mais de um cartão com fechamentos diferentes → entidade `Cartao` persistida.
+1. Needing the app with the PC off or away from home → native app / Flutter, or
+   a hosted server.
+2. More than one user → an API with real authentication + PostgreSQL.
+3. JSON file above ~5MB or noticeable slowness → SQLite.
+4. More than one credit card with different closing days → a persisted `Cartao`
+   (card) entity.

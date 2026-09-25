@@ -1,446 +1,468 @@
 # CLAUDE.md
 
-> Leia este arquivo no início de cada sessão. Ele é documento vivo: toda descoberta
-> não óbvia entra em Common Hurdles **antes** de seguir para o próximo passo.
+> Instructions for the AI pair programmer (Claude Code) working on this repository.
+> Read this file at the start of every session. It is a living document: every
+> non-obvious discovery goes into **Common Hurdles** *before* moving on.
 
-## Visão Geral e Objetivo
+## Overview and Goal
 
-Finance Platform: controle financeiro pessoal multiplataforma. A tese central é que
-**atrito mata hábito** — se registrar uma movimentação leva mais de ~20 segundos, o
-usuário para de usar. Menor atrito → mais hábito → mais controle financeiro real.
-MVP pessoal, arquitetado para evoluir a produto comercial.
+Finance Platform: cross-platform personal finance tracking. The core thesis is that
+**friction kills habit** — if logging a transaction takes more than ~20 seconds,
+people stop doing it. Less friction → more habit → real control over money.
+Personal MVP, designed to grow into a commercial product.
 
-Consequência prática: toda feature responde "isso aumenta ou diminui o tempo até o
-usuário registrar um gasto?". Se aumenta, precisa de justificativa forte.
+In practice, every feature has to answer: "does this increase or decrease the time
+until the user logs an expense?" If it increases it, it needs a strong reason.
 
-## Disciplina de Trabalho (Extreme Programming)
+## Working Discipline (Extreme Programming)
 
-Vigente em todas as sessões, incluindo futuras.
+Applies to every session, including future ones.
 
-- **Papéis:** Augusto traz o *quê* e o *porquê* (direção, arquitetura, domínio,
-  prioridades) e é a autoridade final e o code review. Claude traz o *como*
-  (implementação, testes, propostas). Claude questiona, aponta riscos e propõe o
-  caminho mais simples — não apenas executa. Decisão do Augusto **não** é autorização
-  para pular etapas de qualidade: se um pedido quebra estas regras, avisar antes.
-- **Segurança e casos de borda** são responsabilidade do Claude levantar, mesmo (e
-  principalmente) quando não são pedidos explicitamente.
-- **TDD desde o commit 1:** red → green → refactor. Nenhuma feature "testo depois".
-- **CI verde é inviolável:** todo commit em `main` é production-ready.
-- **Small releases:** cada commit é pequeno, testado e potencialmente entregável.
-- **Refactoring contínuo:** podar é parte do fluxo, não uma fase separada.
-- **Segurança como hábito:** tratada onde a superfície de risco aparece, não numa
-  sprint de segurança no fim.
+- **Roles:** Augusto brings the *what* and the *why* (direction, architecture,
+  domain, priorities) and is the final authority and code reviewer. Claude brings
+  the *how* (implementation, tests, proposals). Claude questions decisions, points
+  out risks and proposes the simplest path — it does not just execute. A decision
+  by Augusto is **not** permission to skip quality steps: if a request breaks these
+  rules, say so first.
+- **Security and edge cases** are Claude's responsibility to raise, even (and
+  especially) when nobody asked.
+- **TDD from commit 1:** red → green → refactor. No "I'll test it later".
+- **Green CI is non-negotiable:** every commit on `main` is production-ready.
+- **Small releases:** each commit is small, tested and potentially shippable.
+- **Continuous refactoring:** pruning is part of the flow, not a separate phase.
+- **Security as a habit:** handled where the attack surface appears, not in a
+  security sprint at the end.
 
-### Resolvendo a tensão TDD × CI verde
+### Resolving the TDD × green CI tension
 
-O ciclo red → green → refactor acontece **na árvore de trabalho**, não no histórico.
-Commitar um teste vermelho violaria "todo commit é production-ready". Portanto: o
-commit contém teste + implementação juntos, verde. O "red" fica no seu terminal.
+The red → green → refactor cycle happens **in the working tree**, not in history.
+Committing a failing test would break "every commit is production-ready". So each
+commit contains the test and the implementation together, green. The "red" stays in
+the terminal.
 
-### Métrica de teste
+### Test metric
 
-Não perseguimos razão de linhas teste/produção — isso premia teste de enchimento. O
-compromisso é: **todo branch e caso de borda relevante coberto**, e trechos
-descobertos são declarados explicitamente na revisão.
+We do not chase a test-to-code line ratio — it rewards filler tests. The commitment
+is: **every relevant branch and edge case covered**, and uncovered code is declared
+explicitly in review.
 
-## Stack Tecnológico
+## Language
 
-Definida em [RFC-0001](docs/decisions/rfc-0001-escolha-da-stack.md) (aprovado).
-Não alterar sem novo RFC ou ADR.
+- **English:** comments, internal error strings, test names and failure messages,
+  documentation, new commit messages.
+- **Portuguese (pt-BR):** everything the end user or operator reads — the UI, API
+  error messages, configuration errors, startup logs. The product is Brazilian.
+- **Identifiers stay in Portuguese** as the domain's ubiquitous language
+  (`Lancamento`, `fatura`, `parcela`, `competencia`). The README has a glossary.
+- Test *inputs* are Portuguese user text (`"mercado 120 15/03"`) because that is
+  what the parser parses. Never translate them.
+- Commits before September 2026 are in Portuguese; history is not rewritten.
 
-**Desvio vigente para o MVP:** [ADR-0001](docs/decisions/adr-0001-mvp-binario-go.md) —
-binário Go + página HTML + arquivo JSON, sem Flutter e sem Postgres. O ADR lista
-os gatilhos que reabrem a decisão.
+## Technology Stack
 
-| Camada | Escolha |
+Defined in [RFC-0001](docs/decisions/rfc-0001-escolha-da-stack.md) (approved).
+Do not change it without a new RFC or ADR.
+
+**Current deviation for the MVP:** [ADR-0001](docs/decisions/adr-0001-mvp-binario-go.md) —
+Go binary + HTML page + JSON file, no Flutter and no PostgreSQL. The ADR lists the
+triggers that reopen the decision.
+
+| Layer | Choice |
 |---|---|
-| Frontend | Flutter (Riverpod = estado, GoRouter = navegação) |
+| Frontend | Flutter (Riverpod = state, GoRouter = navigation) |
 | Backend | Go |
-| Banco | PostgreSQL (GORM no MVP; SQLC quando exigir queries otimizadas) |
+| Database | PostgreSQL (GORM for the MVP; SQLC when queries need tuning) |
 | Offline | SQLite via Drift |
 | Auth / Storage | Supabase |
-| Parsing | Regex/regras — **não** LLM (custo e latência por lançamento) |
+| Parsing | Regex/rules — **not** an LLM (latency and cost per entry) |
 | Container | Docker |
 | CI/CD | GitHub Actions |
-| Deploy | Railway ou Render + Supabase |
+| Deploy | Railway or Render + Supabase |
 
-## Estrutura de Diretórios
+## Directory Structure
 
 ```
-/api/cmd/app            → binário do MVP (main + config)
-/api/internal/parser    → texto → lançamento
-/api/internal/fatura    → competência e parcelas
-/api/internal/resumo    → números do dashboard
-/api/internal/armazem   → persistência em JSON
-/api/internal/web       → HTTP + página (static/ embutido no binário)
-/docs/decisions         → RFCs e ADRs
+/api/cmd/app            → MVP binary (main + config)
+/api/internal/parser    → text → entry
+/api/internal/fatura    → statements and installments
+/api/internal/resumo    → dashboard numbers
+/api/internal/armazem   → JSON persistence
+/api/internal/web       → HTTP + page (static/ embedded in the binary)
+/docs/decisions         → RFCs and ADRs
 .github/workflows/ci.yml
 .golangci.yml
 osv-scanner.toml
 ```
 
-`app/` (Flutter) não existe — adiado pelo ADR-0001. Nasce no commit que trouxer o
-primeiro código dele.
+`app/` (Flutter) does not exist — postponed by ADR-0001. It is created in the commit
+that brings its first code.
 
-## Variáveis de Ambiente
+## Environment Variables
 
-Regra: cada env var nova entra nesta tabela **no mesmo PR que a introduz**, com nome,
-propósito, obrigatória/opcional e onde é lida. Segredo nunca vai para o repositório —
-`.env` está no `.gitignore` e o job de SAST roda a ruleset `p/secrets` justamente para
-pegar vazamento acidental.
+Rule: every new variable goes into this table **in the same commit that introduces
+it**, with name, purpose, required/optional and where it is read. Secrets never go
+into the repository — `.env` is in `.gitignore` and the SAST job runs the
+`p/secrets` ruleset precisely to catch accidental leaks.
 
-| Nome | Propósito | Obrigatória | Onde é usada |
+| Name | Purpose | Required | Read by |
 |---|---|---|---|
-| `FINANCE_DIA_FECHAMENTO` | Dia de fechamento do cartão (1..31) | **Sim** | `cmd/app` → `resumo` |
-| `FINANCE_ENDERECO` | `host:porta` onde escutar. Padrão `127.0.0.1:8080` (só esta máquina) | Não | `cmd/app` |
-| `FINANCE_DADOS` | Caminho do arquivo JSON. Padrão `dados.json` | Não | `cmd/app` → `armazem` |
-| `FINANCE_SENHA` | Senha do Basic Auth, mín. 8 caracteres | **Sim fora do loopback** | `cmd/app` → `web` |
+| `FINANCE_DIA_FECHAMENTO` | Credit card closing day (1..31) | **Yes** | `cmd/app` → `resumo` |
+| `FINANCE_ENDERECO` | `host:port` to listen on. Default `127.0.0.1:8080` (this machine only) | No | `cmd/app` |
+| `FINANCE_DADOS` | Path of the JSON data file. Default `dados.json` | No | `cmd/app` → `armazem` |
+| `FINANCE_SENHA` | Basic Auth password, at least 8 characters | **Yes off loopback** | `cmd/app` → `web` |
 
-`:8080` sem host escuta em **todas** as interfaces — parece local, não é, e exige
-senha. Testado.
+`:8080` with no host listens on **every** interface — it looks local, it is not, and
+it requires a password. Tested.
 
-## Principais Serviços, Jobs e Models
+## Main Packages and Models
 
-### `api/internal/parser` — domínio puro, sem I/O
+### `api/internal/parser` — pure domain, no I/O
 
-`Parse(entrada string) (Lancamento, error)` converte a entrada de uma linha do
-usuário em lançamento estruturado. Cobertura 100%.
+`Parse(entrada string, agora time.Time) (Lancamento, error)` turns the user's
+one-line input into a structured entry. 100% coverage.
 
 ```go
 type Lancamento struct {
-    Centavos  int64          // TOTAL da compra, nunca float64
-    Categoria Categoria      // conjunto fechado
-    Tipo      Tipo           // despesa | receita, derivado da categoria
-    Data      time.Time      // data da compra, truncada na meia-noite
-    Forma     FormaPagamento // "" quando o usuário não disse
-    Parcelas  int            // 1 para à vista
+    Centavos  int64          // purchase TOTAL, never float64
+    Categoria Categoria      // closed set
+    Tipo      Tipo           // despesa | receita (expense | income), from the category
+    Data      time.Time      // purchase date, truncated to midnight
+    Forma     FormaPagamento // "" when the user did not say
+    Parcelas  int            // 1 for a single payment
 }
 ```
 
-`Parse` recebe o relógio como parâmetro. Nunca chamar `time.Now()` dentro do
-domínio: destrói a pureza e faz o teste de `"ontem"` depender do calendário.
+`Parse` takes the clock as a parameter. Never call `time.Now()` inside the domain:
+it breaks purity and makes the `"ontem"` (yesterday) test depend on the calendar.
 
-| Arquivo | Responsabilidade |
+| File | Responsibility |
 |---|---|
-| `parser.go` | `Parse`, `Lancamento`, `Tipo`, limite de tamanho, **ordem do pipeline** |
-| `valor.go` | valor em pt-BR → centavos; erros de faixa; `MaxEntrada` |
-| `categoria.go` | conjunto fechado, mapa de termos, `normalizar`, `tipoDe` |
-| `data.go` | `hoje`/`ontem`/`dd/mm[/aa[aa]]`; `ErrDataInvalida` |
-| `pagamento.go` | `FormaPagamento` e mapa de termos |
-| `parcela.go` | token `Nx`; delega teto e erro para `fatura` |
+| `parser.go` | `Parse`, `Lancamento`, `Tipo`, size limit, **pipeline order** |
+| `valor.go` | pt-BR amount → cents; range errors; `MaxEntrada` |
+| `categoria.go` | closed set, term map, `normalizar`, `tipoDe` |
+| `data.go` | `hoje`/`ontem`/`dd/mm[/yy[yy]]`; `ErrDataInvalida` |
+| `pagamento.go` | `FormaPagamento` and its term map |
+| `parcela.go` | `Nx` token; delegates ceiling and error to `fatura` |
 
-**A ordem do pipeline em `Parse` é regra, não estilo.** Tokens que contêm
-dígitos mas não são dinheiro — data e parcela — saem da string **antes** da
-extração do valor. Sem isso, a regra "vale o último número" pega o pedaço errado
-e o app guarda valor errado **sem falhar e sem avisar**:
+**The pipeline order in `Parse` is a rule, not style.** Tokens that contain digits
+but are not money — dates and installments — are removed from the string **before**
+the amount is extracted. Otherwise the "last number wins" rule picks the wrong piece
+and the app stores a wrong amount **without failing and without warning**:
 
-| Entrada | Sem a remoção | Correto |
+| Input | Without removal | Correct |
 |---|---|---|
 | `"mercado 120 15/03"` | R$ 0,03 | R$ 120,00 |
 | `"mercado 120 15/03/2026"` | R$ 20,26 | R$ 120,00 |
-| `"300 mercado 3x"` | R$ 3,00 | R$ 300,00 em 3x |
+| `"300 mercado 3x"` | R$ 3,00 | R$ 300,00 in 3 installments |
 
-Todo token novo que contenha dígito entra nessa fila de remoção, com teste.
+Every new token that contains a digit joins this removal queue, with a test.
 
-A normalização (`normalizar`) roda **uma vez**, no início do `Parse`. Todo o
-resto do pipeline espera a string já normalizada.
+Normalization (`normalizar`) runs **once**, at the start of `Parse`. The rest of the
+pipeline expects the already-normalized string.
 
-Erros exportados: `ErrSemValor`, `ErrValorInvalido`, `ErrValorNaoPositivo`,
-`ErrEntradaLonga`, `ErrDataInvalida`. Comparar com `errors.Is`, nunca por string.
+Exported errors: `ErrSemValor`, `ErrValorInvalido`, `ErrValorNaoPositivo`,
+`ErrEntradaLonga`, `ErrDataInvalida`. Compare with `errors.Is`, never by string.
 
-Comportamentos que são decisão, não acaso — todos com teste:
+Behaviors that are decisions, not accidents — all tested:
 
-- Termo desconhecido → `Outros`, nunca erro.
-- `Outros` → `Despesa` (é ambígua; despesa é a maioria esmagadora).
-- `"cartao"` sozinho → `Credito` (quem paga no débito costuma dizer "débito").
-- Forma ausente → `FormaNaoInformada`. O parser relata o que achou; aplicar o
-  padrão do usuário é da camada que conhece configuração de usuário.
-- `Parcelas > 1` infere `Credito` **só quando a forma não foi dita** — inferência
-  preenche lacuna, não sobrescreve o usuário.
-- Sinal negativo ignorado: `-5 mercado` é despesa de R$ 5,00.
-- Mais de duas casas decimais trunca, não arredonda: `42,555` → R$ 42,55.
-- `dd/mm` sem ano → ocorrência passada mais recente (lançar atrasado é rotina,
-  lançar no futuro quase sempre é engano).
+- Unknown term → `Outros` (other), never an error.
+- `Outros` → `Despesa` (ambiguous; expenses are the overwhelming majority).
+- `"cartao"` (card) alone → `Credito` (people paying by debit usually say "débito").
+- No payment method → `FormaNaoInformada`. The parser reports what it found;
+  applying the user's default belongs to the layer that knows user settings.
+- `Parcelas > 1` infers `Credito` **only when no method was given** — inference
+  fills a gap, it does not override the user.
+- Negative sign ignored: `-5 mercado` is an expense of R$ 5,00.
+- More than two decimals truncates, never rounds: `42,555` → R$ 42,55.
+- `dd/mm` with no year → most recent past occurrence (logging late is routine;
+  logging in the future is almost always a mistake).
 
-Ainda não existem: conta e descrição no `Lancamento` — entram no slice que
-precisar delas.
+Not there yet: account and description on `Lancamento` — they arrive with the slice
+that needs them.
 
-### `api/internal/fatura` — domínio puro, sem I/O
+### `api/internal/fatura` — pure domain, no I/O
 
-Calendário e divisão de dinheiro não são análise de texto. Trabalha só com
-primitivos e **não importa `parser`** (a dependência é `parser → fatura`).
-Cobertura 100%.
+Calendar math and splitting money are not text analysis. Works only with primitives
+and **does not import `parser`** (the dependency is `parser → fatura`). 100% coverage.
 
 ```go
-type Competencia struct { Ano int; Mes time.Month }  // sem dia, de propósito
+type Competencia struct { Ano int; Mes time.Month }  // no day, on purpose
 func De(compra time.Time, diaFechamento int) (Competencia, error)
 func Dividir(total int64, parcelas int, compra time.Time, diaFechamento int) ([]Parcela, error)
 ```
 
-- **Compra no próprio dia do fechamento vai para a fatura seguinte.** Decisão do
-  Augusto (30/07/2026); varia por emissor, então conferir contra uma fatura real.
-- `Competencia` não tem dia porque fatura é balde mensal — somar meses num par
-  (ano, mês) elimina de graça o "31 de janeiro + 1 mês".
-- A comparação é por número do dia, sem ajustar ao tamanho do mês. Cartão que
-  fecha dia 31 resolve sozinho: em fevereiro todo dia é < 31.
-- Sobra da divisão vai na **primeira** parcela. A soma das parcelas sempre fecha
-  com o total — testado como invariante, não como exemplo.
-- `MaxParcelas` e `ErrParcelasInvalidas` moram **aqui**, não no parser: é onde o
-  slice de tamanho N é alocado, e quantas parcelas um cartão aceita é regra de
-  cartão, não de texto.
+- **A purchase on the closing day itself goes to the next statement.** Augusto's
+  decision (2026-07-30); it varies by issuer, so check it against a real statement.
+- `Competencia` has no day because a statement is a monthly bucket — adding months
+  to a (year, month) pair removes the "January 31 + 1 month" problem for free.
+- The comparison is by day number, with no clamping to the month length. A card
+  closing on the 31st handles itself: in February every day is < 31.
+- The division remainder goes on the **first** installment. Installments always add
+  up to the total — tested as an invariant, not as an example.
+- `MaxParcelas` and `ErrParcelasInvalidas` live **here**, not in the parser: this is
+  where the N-sized slice is allocated, and how many installments a card accepts is
+  a card rule, not a text rule.
 
-O dia de fechamento é parâmetro, não entidade `Cartao` — sem persistência ele não
-teria onde ser guardado. A entidade nasce com o banco.
+The closing day is a parameter, not a `Cartao` entity — without persistence there
+would be nowhere to store it. The entity arrives with the database.
 
-**Consequência para o dashboard:** "Despesas do mês" passa a significar "parcelas
-com competência neste mês", não "compras feitas neste mês". São dois números
-diferentes.
+**Consequence for the dashboard:** "expenses this month" means "installments whose
+statement is this month", not "purchases made this month". Two different numbers.
 
-### `api/internal/resumo` — domínio puro, sem I/O
+### `api/internal/resumo` — pure domain, no I/O
 
-`Mensal(mes, lancamentos, diaFechamento) (Resumo, error)` produz os números do
-dashboard. Depende de `parser` e `fatura`; ninguém depende dele. Cobertura 100%.
+`Mensal(mes, lancamentos, diaFechamento) (Resumo, error)` produces the dashboard
+numbers. Depends on `parser` and `fatura`; nothing depends on it. 100% coverage.
 
-A regra que justifica o pacote não é a soma, é a distinção entre dois números que
-parecem o mesmo:
+The rule that justifies the package is not the sum, it is the distinction between
+two numbers that look the same:
 
-| Lançamento | Pesa em |
+| Entry | Counts in |
 |---|---|
-| Receita | mês da `Data` — ignora fatura e parcelas (cartão é forma de gastar, não de receber) |
-| Despesa à vista (débito, pix, dinheiro, **não informada**) | mês da `Data` |
-| Despesa no crédito | competência de **cada parcela** |
+| Income | month of `Data` — ignores statements and installments (a card is for spending, not receiving) |
+| Non-credit expense (debit, pix, cash, **not stated**) | month of `Data` |
+| Credit card expense | statement of **each installment** |
 
-`FormaNaoInformada` conta no mês da data: o parser não inventa forma, e tratar o
-desconhecido como crédito adiaria dinheiro que talvez já tenha saído.
+`FormaNaoInformada` counts in the month of the date: the parser does not invent a
+method, and treating the unknown as credit would postpone money that may already
+have left the account.
 
-`Economia` fica negativa em mês que só tem fatura para pagar — isso é informação,
-não erro.
+Savings (`Economia`) go negative in a month that only has a statement to pay — that
+is information, not an error.
 
-**Ainda não existe `Saldo atual`.** Exige saldo inicial e o pagamento da fatura
-modelado como lançamento; nenhum dos dois existe. Entra no slice que trouxer
-conta e pagamento de fatura.
+**There is no current balance yet.** It needs an opening balance and statement
+payments modeled as entries; neither exists. It arrives with the slice that brings
+accounts and statement payments.
 
-**Dívida conhecida:** `Lancamento` mora em `parser`, então `resumo` importa o
-pacote de texto só pelo tipo. Move para um pacote de domínio próprio no dia em
-que um terceiro consumidor aparecer — hoje seria renomeação sem contrapartida.
+**Known debt:** `Lancamento` lives in `parser`, so `resumo`, `armazem` and `web`
+import the text package just for the type. The trigger recorded for moving it into
+its own domain package ("a third consumer appears") has fired; it was deferred to
+ship the MVP. Do it in the next slice that touches `Lancamento`.
 
-### `api/internal/armazem` — persistência em arquivo JSON
+### `api/internal/armazem` — JSON file persistence
 
-Guarda os lançamentos num arquivo JSON local ([ADR-0001](docs/decisions/adr-0001-mvp-binario-go.md)).
-`Abrir`, `Adicionar`, `Listar` (mais recente primeiro, devolve cópia), `Remover`.
-Seguro para uso concorrente. Cobertura 90,4%.
+Stores entries in a local JSON file ([ADR-0001](docs/decisions/adr-0001-mvp-binario-go.md)).
+`Abrir` (open), `Adicionar` (add), `Listar` (list, newest first, returns a copy),
+`Remover` (remove). Safe for concurrent use. 90.4% coverage.
 
-Garantias, todas com teste:
+Guarantees, all tested:
 
-- **Escrita atômica:** temporário no mesmo diretório + `rename`. Queda no meio da
-  gravação deixa o arquivo antigo inteiro, nunca pela metade.
-- **Memória só muda depois que o disco confirma.** Se gravar falha, memória e
-  disco seguem iguais — a tela nunca mostra um lançamento que some no reinício.
-- **Arquivo corrompido é erro, nunca "começar vazio"**: o próximo `Adicionar`
-  sobrescreveria tudo. O arquivo fica intacto para recuperação.
-- **ID nunca é reaproveitado** (`proximo_id` persistido): um DELETE atrasado não
-  apaga o registro errado.
-- Permissão `0600`: dado financeiro, só o dono lê.
-- Guarda o **texto original** digitado — é a melhor descrição que existe.
+- **Atomic writes:** temporary file in the same directory + `rename`. A crash
+  mid-write leaves the old file whole, never half-written.
+- **Memory only changes after the disk confirms.** If a write fails, memory and disk
+  stay equal — the screen never shows an entry that disappears on restart.
+- **A corrupted file is an error, never "start empty"**: the next `Adicionar` would
+  overwrite everything. The file is left untouched for recovery.
+- **IDs are never reused** (`proximo_id` is persisted): a delayed DELETE cannot
+  remove the wrong record.
+- Permission `0600`: financial data, only the owner reads it.
+- Stores the **original typed text** — the best description there is.
 
-Descoberto e declarado: falhas de serializar, write, sync, close e chmod do
-temporário. Não induzíveis sem mock de filesystem, e o mock seria interface com
-uma implementação só.
+Uncovered and declared: failures when encoding, writing, syncing, closing and
+chmod-ing the temp file. They cannot be induced without a filesystem mock, and that
+mock would be an interface with a single implementation.
 
-### `api/internal/web` — HTTP e página do MVP
+### `api/internal/web` — HTTP and the MVP page
 
-`Novo(Config) http.Handler`. Rotas: `GET /` (página), `GET/POST /api/lancamentos`,
-`DELETE /api/lancamentos/{id}`, `GET /api/resumo?mes=AAAA-MM`. A página
-(`static/`) vai embutida no binário. Cobertura 98,9%.
+`Novo(Config) http.Handler`. Routes: `GET /` (page), `GET/POST /api/lancamentos`,
+`DELETE /api/lancamentos/{id}`, `GET /api/resumo?mes=YYYY-MM`. The page (`static/`)
+is embedded in the binary. 98.9% coverage.
 
-Superfícies e tratamento, todas com teste:
+Attack surfaces and their handling, all tested:
 
-| Ameaça | Tratamento |
+| Threat | Handling |
 |---|---|
-| Qualquer um na mesma rede | Basic Auth (prompt nativo). SHA-256 + comparação em tempo constante: nem o tamanho da senha vaza |
-| CSRF (o navegador reenvia a senha sozinho) | POST exige `Content-Type: application/json` → 415. Formulário de outro site não consegue enviar isso sem preflight CORS, que o servidor não autoriza |
-| XSS pelo texto digitado | Front usa `textContent`, nunca `innerHTML`; CSP `default-src 'self'` (nada inline — por isso CSS e JS são arquivos separados); `frame-ancestors 'none'` |
-| Corpo gigante | `MaxBytesReader` de 4KB → 413 |
-| Cliente lento segurando conexão | Timeouts explícitos no `http.Server` |
+| Anyone on the same network | Basic Auth (native prompt). SHA-256 + constant-time comparison: not even the password length leaks |
+| CSRF (the browser resends the password on its own) | POST requires `Content-Type: application/json` → 415 otherwise. A form on another site cannot send that without a CORS preflight, which the server never grants |
+| XSS through typed text | Front end uses `textContent`, never `innerHTML`; CSP `default-src 'self'` (nothing inline — that is why CSS and JS are separate files); `frame-ancestors 'none'` |
+| Oversized bodies | 4KB `MaxBytesReader` → 413 |
+| Slow clients holding connections | Explicit timeouts on `http.Server` |
 
-Erros do domínio viram 400 com mensagem em português que diz como corrigir. Falha
-de disco vira 500 dizendo **o que não aconteceu** ("Nada foi gravado") para o
-usuário saber que precisa redigitar. Descoberto e declarado: o `default` de
-`mensagem`, inalcançável enquanto o parser só devolve erros já mapeados.
+Domain errors become 400 with a Portuguese message that says how to fix the input.
+A disk failure becomes 500 saying **what did not happen** ("Nada foi gravado" —
+nothing was saved) so the user knows to retype. Uncovered and declared: the
+`default` branch of `mensagem`, unreachable while the parser only returns errors
+that are already mapped.
 
-Sem TLS: a senha trafega em claro na rede local. Aceitável em casa, inaceitável em
-rede pública (ADR-0001).
+No TLS: the password travels in clear text on the local network. Acceptable at
+home, unacceptable on a public network (ADR-0001).
 
-## Design Patterns e Convenções
+## Design Patterns and Conventions
 
-- **Dinheiro é `int64` em centavos. Nunca `float64`.** `0.1 + 0.2 != 0.3` em ponto
-  flutuante; um saldo financeiro em float corrompe silenciosamente. Formatação para
-  exibição acontece só na borda de apresentação.
-- **Locale é pt-BR na entrada do usuário:** vírgula é separador decimal (`42,50`),
-  ponto é separador de milhar (`1.234,56`). O parser assume isso; testes cobrem ambos.
-- **Categorias são um conjunto fechado**, não texto livre.
-  Receitas: Salário, Freelancer, Investimentos, Outros.
-  Despesas: Alimentação, Mercado, Transporte, Casa, Saúde, Lazer, Educação,
+- **Money is `int64` cents. Never `float64`.** `0.1 + 0.2 != 0.3` in floating point;
+  a balance stored as float corrupts silently. Formatting for display only happens at
+  the presentation edge.
+- **User input is pt-BR:** the comma is the decimal separator (`42,50`) and the dot
+  is the thousands separator (`1.234,56`). The parser assumes this; tests cover both.
+- **Categories are a closed set**, not free text.
+  Income: Salário, Freelancer, Investimentos, Outros.
+  Expenses: Alimentação, Mercado, Transporte, Casa, Saúde, Lazer, Educação,
   Assinaturas, Outros.
-  Entrada não reconhecida cai em "Outros", não gera erro — atrito zero é mais
-  importante que precisão de categoria.
-- **Entrada com mais de um número: vale o último.** `"2 cafés 15"` → R$ 15,00;
-  `"3x uber 18"` → R$ 18,00. Decisão de produto do Augusto (30/07/2026). Regra de uma
-  linha, compatível com todos os exemplos de uma entrada só (`120 mercado`, `Uber 18`,
-  `Salário 3500`), e que **nunca rejeita nem pergunta** — rejeitar entrada ambígua
-  adicionaria atrito exatamente onde a tese do produto diz que atrito mata hábito.
-- **Domínio puro no centro:** parser e regras de negócio sem I/O, sem banco, sem HTTP.
-  Testáveis com `go test` sem infraestrutura.
-- **Integrações externas atrás de interfaces** (mitigação do RFC-0001 para o
-  ecossistema Go e para o lock-in do Supabase). ID interno em UUID próprio, mapeado
-  para o ID do Supabase — nunca acoplar regra de negócio ao ID do provedor.
-- **IA desacoplada:** se um provedor de LLM entrar, é atrás de interface, com regra de
-  negócio fora do modelo.
+  Unrecognized input falls into "Outros" and is not an error — zero friction matters
+  more than category precision.
+- **Input with more than one number: the last one wins.** `"2 cafés 15"` → R$ 15,00;
+  `"3x uber 18"` → R$ 18,00. Augusto's product decision (2026-07-30). A one-line rule,
+  consistent with every single-number example (`120 mercado`, `Uber 18`,
+  `Salário 3500`), that **never rejects and never asks** — rejecting ambiguous input
+  would add friction exactly where the product thesis says friction kills habit.
+- **Pure domain at the center:** parser and business rules have no I/O, no database,
+  no HTTP. Testable with `go test` and no infrastructure.
+- **External integrations behind interfaces** (RFC-0001's mitigation for the Go
+  ecosystem and Supabase lock-in). Internal IDs are our own UUIDs mapped to the
+  Supabase ID — never couple business rules to the provider's ID.
+- **AI decoupled:** if an LLM provider comes in, it goes behind an interface, with
+  business rules outside the model.
 
-## Fluxo Principal do Sistema
+## Main System Flow
 
 ```
-Entrada do usuário ("120 mercado")
-  → Parser (regex + regras, domínio puro)
-  → Movimentacao validada (valor em centavos, categoria, conta, data)
-  → Persistência local (SQLite/Drift, offline-first)
-  → Sync → API Go → PostgreSQL
-  → Dashboard (saldo, receitas do mês, despesas do mês, economia)
+User input ("120 mercado")
+  → Parser (regex + rules, pure domain)
+  → Validated entry (amount in cents, category, account, date)
+  → Local persistence (SQLite/Drift, offline-first)
+  → Sync → Go API → PostgreSQL
+  → Dashboard (balance, income this month, expenses this month, savings)
 ```
 
-**MVP (ADR-0001):** entrada → `parser` → `armazem` (JSON) → `resumo` → página.
-Sem sync, sem Postgres, sem Flutter. O fluxo acima continua sendo o alvo; o ADR
-lista os gatilhos que fazem voltar a ele.
+**MVP (ADR-0001):** input → `parser` → `armazem` (JSON) → `resumo` → page. No sync,
+no PostgreSQL, no Flutter. The flow above is still the target; the ADR lists the
+triggers for going back to it.
 
-## Segurança — superfícies conhecidas
+## Security — known surfaces
 
-| Superfície | Onde aparece | Tratamento |
+| Surface | Where it appears | Handling |
 |---|---|---|
-| Entrada não confiável | Parser recebe string livre do usuário | Limite de tamanho da entrada; validação de faixa do valor (> 0, sem overflow de `int64`) |
-| ReDoS | Regex sobre entrada do usuário | O `regexp` do Go é RE2 (linear, sem backtracking) — imune por construção. **Não** trocar por biblioteca com backtracking |
-| Vazamento de segredo | Chaves Supabase | `.env` no `.gitignore` + ruleset `p/secrets` no SAST |
-| Injeção SQL | Futuro, camada de persistência | GORM parametriza; nunca concatenar SQL |
-| AuthZ | Futuro, API multiusuário | Toda query filtra por usuário no servidor, nunca confia em ID vindo do cliente |
+| Untrusted input | The parser receives free text from the user | Input size limit; amount range validation (> 0, no `int64` overflow) |
+| ReDoS | Regexes over user input | Go's `regexp` is RE2 (linear, no backtracking) — immune by construction. **Do not** swap it for a backtracking library |
+| Secret leaks | Supabase keys | `.env` in `.gitignore` + `p/secrets` ruleset in SAST |
+| Network exposure | MVP server | Password required off loopback; CSRF, XSS, body size and timeouts handled in `web` |
+| SQL injection | Future persistence layer | GORM parameterizes; never concatenate SQL |
+| AuthZ | Future multi-user API | Every query filters by user on the server; never trust an ID from the client |
 
-Rate limiting, SSRF e path traversal ainda não têm superfície — entram quando a API
-HTTP existir.
+Rate limiting has no surface while the server stays on the local network; it becomes
+mandatory the moment the app is exposed to the internet (password brute force).
 
-## Triagem de vulnerabilidades
+## Vulnerability triage
 
-O "verde inviolável" precisa de válvula, senão vira teatro. Quando `osv-scanner` ou
-`govulncheck` apontarem algo:
+"Always green" needs a release valve, or it becomes theater. When `osv-scanner` or
+`govulncheck` report something:
 
-1. Existe patch? Atualizar a dependência. Fim.
-2. Sem patch, mas `govulncheck` diz que o código **não alcança** a função vulnerável?
-   Registrar em `osv-scanner.toml` com `reason` e `ignoreUntil` (máx. 90 dias).
-3. Sem patch e alcançável? Isolar/mitigar no código ou trocar a dependência.
+1. Is there a patch? Update the dependency. Done.
+2. No patch, but `govulncheck` says the code **does not reach** the vulnerable
+   function? Record it in `osv-scanner.toml` with `reason` and `ignoreUntil` (at most
+   90 days).
+3. No patch and reachable? Isolate/mitigate in code or replace the dependency.
 
-Ignorar sem `reason` e sem data de revisão é violação da regra de CI verde, não
-exceção a ela.
+Ignoring without a `reason` and a review date is a violation of the green-CI rule,
+not an exception to it.
 
 ## Common Hurdles
 
-Toda pegadinha nova entra aqui **antes** de seguir.
+Every new gotcha goes here **before** moving on.
 
-- **Go, Flutter e Docker não vêm instalados nesta máquina.** Antes do primeiro ciclo,
-  confirmar `go version`, `flutter --version` e `docker --version` em um terminal
-  novo — o PATH não recarrega no terminal já aberto.
-- **Flutter não tem pacote oficial no winget.** Só existe `Google.DartSDK` avulso.
-  Instalação é zip + PATH, em caminho sem espaços e fora de `Program Files` — o
-  instalador falha em ambos.
-- **`make` não existe nesta máquina.** Nada de Makefile; comandos crus documentados
-  aqui.
-- **`go` não está no PATH do shell do agente.** O binário vive em
-  `C:\Program Files\Go\bin`. Exportar antes de qualquer comando Go:
+- **Flutter is not installed on this machine** (Go and Docker are). Before any
+  Flutter work, confirm `flutter --version` in a fresh terminal — PATH does not
+  reload in a terminal that is already open.
+- **Flutter has no official winget package.** Only a standalone `Google.DartSDK`
+  exists. Install from the zip + PATH, in a path without spaces and outside
+  `Program Files` — the installer fails in both.
+- **`make` does not exist on this machine.** No Makefile; raw commands are
+  documented here.
+- **`go` is not on the agent shell's PATH.** The binary lives in
+  `C:\Program Files\Go\bin`. Export it before any Go command:
   `export PATH="$PATH:/c/Program Files/Go/bin"`.
-- **`go test -race` não roda nesta máquina.** `-race` exige cgo, cgo exige um
-  compilador C, e não há `gcc` aqui. **Local** usa `go test -cover ./...`; o CI
-  mantém `-race` porque o runner Linux tem toolchain C. Não instale MinGW só para
-  isso — a corrida de dados que importa é detectada no CI, e hoje o domínio é puro,
-  sem concorrência.
-- **`core.autocrlf=true` no git global desta máquina.** Sem `.gitattributes`, os
-  arquivos ficariam CRLF na árvore local e LF no runner Linux, fazendo `gofmt` e
-  `dart format` divergirem entre a sua máquina e o CI — verde local, vermelho no CI,
-  sem diferença visível no diff. Resolvido por `* text=auto eol=lf` no
-  `.gitattributes`. **Não** rode `git config core.autocrlf` para "consertar" nada:
-  o `.gitattributes` tem precedência e é versionado, a config global não.
-- **Módulo Go só com `go.mod` e zero arquivos `.go` reprova no CI.** `golangci-lint`
-  aborta com "no go files to analyze". Por isso `api/go.mod` **não** entra sozinho num
-  commit de infra: nasce junto com o primeiro `.go` e seu teste.
-- **`google/osv-scanner-action` não publica tag flutuante de major.** Não existe `v2`;
-  só releases completas (`v2.3.8`). O pin tem que ser exato — "simplificar" para `@v2`
-  derruba o job com *"unable to find version"*. É a única action do CI assim; todas as
-  outras (`actions/checkout@v7`, `dorny/paths-filter@v4`, `actions/setup-go@v7`,
-  `golangci/golangci-lint-action@v9`, `golang/govulncheck-action@v1`,
-  `subosito/flutter-action@v2`) têm tag de major.
-- **`p/dart` e `p/flutter` não existem no registry do semgrep** (HTTP 404), e `p/go`
-  também não — o correto é `p/golang`. Um config inválido derruba o scan inteiro com
-  exit 7, não é ignorado. Análise estática do Dart fica por conta do `flutter analyze`.
-- **Actions em Node 20 já emitem aviso de depreciação** no runner. Não quebra hoje,
-  quebra sozinho depois. Manter os pins nas majors atuais.
-- **A diretiva `go` do `go.mod` fixa a versão da stdlib, e a stdlib tem CVE.**
-  Sem nenhum commit nosso, `main` ficou vermelha em ago/2026: saíram 8
-  vulnerabilidades na stdlib corrigidas no 1.26.6, e o `go.mod` dizia `1.26.5`.
-  O job `go` seguiu verde (o `govulncheck` viu que o domínio não alcança as funções
-  afetadas); quem reprovou foi o `osv-scanner`, que não faz essa análise para a
-  stdlib. Correção: subir a diretiva para o **último patch da mesma minor**
-  (`go mod edit -go=1.26.X`) — o toolchain é baixado sozinho (`GOTOOLCHAIN=auto`).
-  Trocar de minor (1.27) é outra decisão e não é o que conserta isso.
-- **Logo depois do `git push`, `gh run list --limit 1` ainda mostra o run
-  anterior.** O run novo leva alguns segundos para ser registrado; ler o resultado
-  nesse intervalo faz um run velho parecer o atual (já levou a diagnosticar uma
-  falha que tinha sido corrigida). Filtrar pelo commit:
-  `gh run list --commit $(git rev-parse HEAD)`.
-- **Os campos de `parser.Lancamento` são formato de arquivo.** `armazem` serializa o
-  struct sem tags JSON, então renomear um campo (`Centavos` → `Valor`) faz o
-  arquivo existente ser lido com o campo zerado — **sem erro**. Renomear exige
-  tag `json:"nome_antigo"` ou migração do arquivo.
-- **Rodar o lint localmente antes do push**, porque errcheck/gosec reprovam coisas
-  que o `go vet` deixa passar (já pegou `defer os.Remove` e `Close` sem checar):
-  `go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run ./...`
-  (em `api/`; a primeira execução baixa as dependências do linter, não do projeto).
-- **Os jobs Flutter do CI ficam dormentes até `app/` existir** (o `paths-filter` os
-  desliga). É deliberado, não acidente: o primeiro commit em `app/` provavelmente
-  acusa problema de config, e esse ajuste faz parte daquele commit.
-- **`golangci-lint` v2 mudou o formato do config** (exige `version: "2"`) e pede
-  `golangci-lint-action@v8`. Se a primeira execução falhar com erro de parse, é
-  incompatibilidade do par action/config — corrigir os dois juntos.
+- **`go test -race` does not run on this machine.** `-race` needs cgo, cgo needs a C
+  compiler, and there is no `gcc` here. **Locally** use `go test -cover ./...`; CI
+  keeps `-race` because the Linux runner has a C toolchain. Do not install MinGW just
+  for this.
+- **`core.autocrlf=true` in this machine's global git config.** Without
+  `.gitattributes`, files would be CRLF in the local tree and LF on the Linux runner,
+  making `gofmt` and `dart format` disagree between this machine and CI — green
+  locally, red in CI, with no visible difference in the diff. Fixed by
+  `* text=auto eol=lf` in `.gitattributes`. **Do not** run `git config core.autocrlf`
+  to "fix" anything: `.gitattributes` takes precedence and is versioned; the global
+  config is not.
+- **A Go module with only `go.mod` and zero `.go` files fails CI.** `golangci-lint`
+  aborts with "no go files to analyze". So `go.mod` never goes into an
+  infrastructure-only commit: it arrives with the first `.go` file and its test.
+- **`google/osv-scanner-action` does not publish a floating major tag.** There is no
+  `v2`; only full releases (`v2.3.8`). The pin must be exact — "simplifying" to `@v2`
+  breaks the job with *"unable to find version"*. It is the only action in CI like
+  this; all the others (`actions/checkout@v7`, `dorny/paths-filter@v4`,
+  `actions/setup-go@v7`, `golangci/golangci-lint-action@v9`,
+  `golang/govulncheck-action@v1`, `subosito/flutter-action@v2`) have major tags.
+- **`p/dart` and `p/flutter` do not exist in the semgrep registry** (HTTP 404), and
+  neither does `p/go` — the right one is `p/golang`. One invalid config fails the
+  whole scan with exit 7; it is not ignored. Dart static analysis is handled by
+  `flutter analyze`.
+- **Actions on Node 20 already emit deprecation warnings** on the runner. Nothing
+  breaks today; it will break on its own later. Keep pins on current majors.
+- **`golangci-lint` v2 changed its config format** (it requires `version: "2"`) and
+  needs `golangci-lint-action@v8` or later (we use `@v9`). A config parse error on the
+  first run means the action/config pair is mismatched — fix both together.
+- **The `go` directive in `go.mod` pins the standard library version, and the
+  standard library has CVEs.** With no commit of ours, `main` turned red in Aug/2026:
+  8 standard library vulnerabilities fixed in 1.26.6 were published while `go.mod`
+  said `1.26.5`. The `go` job stayed green (`govulncheck` saw that the domain does not
+  reach the affected functions); `osv-scanner`, which does no such analysis for the
+  standard library, failed. Fix: bump the directive to the **latest patch of the same
+  minor** (`go mod edit -go=1.26.X`) — the toolchain downloads itself
+  (`GOTOOLCHAIN=auto`). Moving to a new minor (1.27) is a separate decision and is not
+  what fixes this.
+- **Right after `git push`, `gh run list --limit 1` still shows the previous run.**
+  The new run takes a few seconds to register; reading results in that window makes
+  an old run look current (it once led to diagnosing a failure that had already been
+  fixed). Filter by commit: `gh run list --commit $(git rev-parse HEAD)`.
+- **The fields of `parser.Lancamento` are a file format.** `armazem` serializes the
+  struct without JSON tags, so renaming a field (`Centavos` → `Valor`) makes the
+  existing file load with that field zeroed — **with no error**. Renaming requires a
+  `json:"old_name"` tag or a file migration.
+- **Run the linter locally before pushing**, because errcheck/gosec fail things that
+  `go vet` lets through (it already caught an unchecked `defer os.Remove` and
+  `Close`): `go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run ./...`
+  (in `api/`; the first run downloads the linter's dependencies, not the project's).
+- **The Flutter CI jobs stay dormant until `app/` exists** (`paths-filter` skips
+  them). That is deliberate: the first commit in `app/` will probably surface a config
+  problem, and fixing it is part of that commit.
+- **Bash heredocs in the agent shell sometimes break on quotes** ("unexpected EOF
+  while looking for matching `''"), especially Python or JSON with backslashes. Write
+  the script or file with the editor tool and run it, instead of inlining it.
 
-## Comandos locais
+## Local commands
 
-Do diretório `api/`, com o PATH já exportado:
+From `api/`, with PATH already exported:
 
 ```bash
 export PATH="$PATH:/c/Program Files/Go/bin" && cd /c/finance-platform/api && gofmt -l . && go test -cover ./...
 ```
 
-Subir o MVP só nesta máquina:
+Run the MVP on this machine only:
 
 ```bash
 cd /c/finance-platform/api && FINANCE_DIA_FECHAMENTO=28 go run ./cmd/app
 ```
 
-Para abrir no celular (mesma wifi), escutar em todas as interfaces com senha — o
-log imprime o endereço a digitar no celular:
+To open it on the phone (same wifi), listen on every interface with a password —
+the log prints the address to type on the phone:
 
 ```bash
-cd /c/finance-platform/api && FINANCE_DIA_FECHAMENTO=28 FINANCE_ENDERECO=0.0.0.0:8080 FINANCE_SENHA=troque-esta-senha go run ./cmd/app
+cd /c/finance-platform/api && FINANCE_DIA_FECHAMENTO=28 FINANCE_ENDERECO=0.0.0.0:8080 FINANCE_SENHA=change-this-password go run ./cmd/app
 ```
 
-Na primeira vez o Windows pergunta se libera o programa no firewall: liberar só em
-**rede privada**.
+The first time, Windows asks whether to allow the program through the firewall:
+allow it on **private networks** only.
 
-Sem `-race` local (ver Common Hurdles). O CI roda `-race` no Linux.
+No local `-race` (see Common Hurdles). CI runs `-race` on Linux.
 
-## Definição de Pronto (checklist pós-implementação)
+## Definition of Done (post-implementation checklist)
 
-- [ ] Teste escrito antes do código, cobrindo caminho feliz e casos de borda
-- [ ] `go test -race ./...` (em `api/`) e `flutter test` (em `app/`) passando
-- [ ] `gofmt -l .` vazio; `golangci-lint run` limpo (inclui `gosec`)
-- [ ] `dart format --set-exit-if-changed .` e `flutter analyze` limpos
-- [ ] `govulncheck ./...` e `osv-scanner` sem finding novo — ou finding registrado em
-      `osv-scanner.toml` com motivo e data de revisão
-- [ ] `semgrep` sem finding novo
-- [ ] Nenhuma env var nova sem linha na tabela acima
-- [ ] Common Hurdles atualizado se algo não óbvio apareceu
-- [ ] Commit pequeno e coeso; a mensagem explica o **porquê**, não o quê
+- [ ] Test written before the code, covering the happy path and edge cases
+- [ ] `go test -race ./...` (in `api/`) and `flutter test` (in `app/`) passing
+- [ ] `gofmt -l .` empty; `golangci-lint run` clean (includes `gosec`)
+- [ ] `dart format --set-exit-if-changed .` and `flutter analyze` clean
+- [ ] `govulncheck ./...` and `osv-scanner` with no new findings — or the finding
+      recorded in `osv-scanner.toml` with a reason and review date
+- [ ] `semgrep` with no new findings
+- [ ] No new environment variable without a row in the table above
+- [ ] Common Hurdles updated if something non-obvious came up
+- [ ] Small, cohesive commit; the message explains **why**, not what
