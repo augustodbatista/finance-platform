@@ -46,7 +46,11 @@ descobertos são declarados explicitamente na revisão.
 ## Stack Tecnológico
 
 Definida em [RFC-0001](docs/decisions/rfc-0001-escolha-da-stack.md) (aprovado).
-Não alterar sem novo RFC.
+Não alterar sem novo RFC ou ADR.
+
+**Desvio vigente para o MVP:** [ADR-0001](docs/decisions/adr-0001-mvp-binario-go.md) —
+binário Go + página HTML + arquivo JSON, sem Flutter e sem Postgres. O ADR lista
+os gatilhos que reabrem a decisão.
 
 | Camada | Escolha |
 |---|---|
@@ -330,6 +334,11 @@ Toda pegadinha nova entra aqui **antes** de seguir.
   stdlib. Correção: subir a diretiva para o **último patch da mesma minor**
   (`go mod edit -go=1.26.X`) — o toolchain é baixado sozinho (`GOTOOLCHAIN=auto`).
   Trocar de minor (1.27) é outra decisão e não é o que conserta isso.
+- **Logo depois do `git push`, `gh run list --limit 1` ainda mostra o run
+  anterior.** O run novo leva alguns segundos para ser registrado; ler o resultado
+  nesse intervalo faz um run velho parecer o atual (já levou a diagnosticar uma
+  falha que tinha sido corrigida). Filtrar pelo commit:
+  `gh run list --commit $(git rev-parse HEAD)`.
 - **Os jobs Flutter do CI ficam dormentes até `app/` existir** (o `paths-filter` os
   desliga). É deliberado, não acidente: o primeiro commit em `app/` provavelmente
   acusa problema de config, e esse ajuste faz parte daquele commit.
