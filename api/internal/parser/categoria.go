@@ -2,13 +2,14 @@ package parser
 
 import "strings"
 
-// Categoria e um conjunto fechado, nao texto livre. Entrada nao reconhecida cai
-// em Outros e nunca vira erro: a tese do produto e que atrito mata habito, e
-// perguntar "qual categoria?" custa mais do que classificar errado.
+// Categoria is a closed set, not free text. Unrecognized input falls into
+// Outros (other) and never becomes an error: the product thesis is that
+// friction kills habit, and asking "which category?" costs more than
+// classifying wrong.
 type Categoria string
 
 const (
-	// Despesas.
+	// Expenses.
 	Alimentacao Categoria = "alimentacao"
 	Mercado     Categoria = "mercado"
 	Transporte  Categoria = "transporte"
@@ -18,22 +19,22 @@ const (
 	Educacao    Categoria = "educacao"
 	Assinaturas Categoria = "assinaturas"
 
-	// Receitas.
+	// Income.
 	Salario       Categoria = "salario"
 	Freelancer    Categoria = "freelancer"
 	Investimentos Categoria = "investimentos"
 
-	// Vale para receita e despesa.
+	// Valid for both income and expenses.
 	Outros Categoria = "outros"
 )
 
-// termos mapeia palavra digitada -> categoria. As chaves ja estao normalizadas
-// (minusculas, sem acento), porque a entrada passa por normalizar() antes.
+// termos maps a typed word to a category. Keys are already normalized
+// (lowercase, no accents), because input goes through normalizar() first.
 //
-// ponytail: lookup exato palavra a palavra. Nao ha stemming, plural nem
-// correcao de digitacao. Se na pratica voce errar categoria com frequencia, o
-// proximo passo e distancia de edicao sobre estas chaves -- nao um LLM, que
-// custaria latencia e dinheiro por lancamento (RFC-0001).
+// ponytail: exact word-by-word lookup. No stemming, plurals or typo
+// correction. If categories are often wrong in practice, the next step is edit
+// distance over these keys -- not an LLM, which would add latency and cost to
+// every entry (RFC-0001).
 var termos = map[string]Categoria{
 	"alimentacao": Alimentacao,
 	"almoco":      Alimentacao,
@@ -106,12 +107,13 @@ var termos = map[string]Categoria{
 	"juros":         Investimentos,
 }
 
-// semAcento troca os acentos do portugues pela letra base. Resolve o caso de
-// "almoço" e "almoco" precisarem cair na mesma categoria.
+// semAcento replaces Portuguese accented letters with their base letter, so
+// "almoço" and "almoco" land on the same category.
 //
-// ponytail: um Replacer da stdlib em vez de golang.org/x/text/unicode/norm.
-// Sao 20 pares que cobrem o portugues inteiro; a dependencia externa so se
-// pagaria se precisassemos normalizar idiomas que nao controlamos.
+// ponytail: a standard library Replacer instead of
+// golang.org/x/text/unicode/norm. About 20 pairs cover all of Portuguese; the
+// external dependency would only pay off if we had to normalize languages we
+// do not control.
 var semAcento = strings.NewReplacer(
 	"á", "a", "à", "a", "â", "a", "ã", "a", "ä", "a",
 	"é", "e", "è", "e", "ê", "e", "ë", "e",
@@ -121,19 +123,19 @@ var semAcento = strings.NewReplacer(
 	"ç", "c", "ñ", "n",
 )
 
-// normalizar deixa o texto comparavel com as chaves de termos e com os padroes
-// de palavra do pacote. Parse chama uma vez, no inicio, e todo o resto do
-// pipeline trabalha sobre o resultado -- normalizar em dois lugares diferentes
-// era o que fazia a string intermediaria sair ora original, ora normalizada,
-// dependendo do caminho tomado.
+// normalizar makes text comparable with the termos keys and with the package's
+// word patterns. Parse calls it once, up front, and the rest of the pipeline
+// works on the result -- normalizing in two different places is what used to
+// make the intermediate string come out sometimes original, sometimes
+// normalized, depending on the path taken.
 func normalizar(s string) string {
 	return semAcento.Replace(strings.ToLower(s))
 }
 
-// classificar devolve a categoria da primeira palavra reconhecida da entrada.
-// Nenhuma palavra reconhecida devolve Outros, nunca erro.
+// classificar returns the category of the first recognized word in the input.
+// No recognized word returns Outros, never an error.
 //
-// Espera a entrada ja normalizada (ver normalizar).
+// Expects normalized input (see normalizar).
 func classificar(entrada string) Categoria {
 	for _, palavra := range strings.Fields(entrada) {
 		if c, ok := termos[palavra]; ok {
@@ -143,19 +145,19 @@ func classificar(entrada string) Categoria {
 	return Outros
 }
 
-// receitas sao as categorias que representam dinheiro entrando.
+// receitas are the categories that represent money coming in.
 var receitas = map[Categoria]bool{
 	Salario:       true,
 	Freelancer:    true,
 	Investimentos: true,
 }
 
-// tipoDe deriva receita ou despesa da categoria, para que o usuario nao precise
-// declarar: quem digita "salario 3500" ja disse tudo o que era preciso.
+// tipoDe derives income or expense from the category, so the user never has to
+// declare it: typing "salario 3500" already says everything needed.
 //
-// Outros cai em Despesa. E ambigua por definicao (existe nas duas listas), e a
-// esmagadora maioria dos lancamentos e saida de dinheiro -- o padrao que erra
-// menos vezes.
+// Outros falls into Despesa (expense). It is ambiguous by definition (it exists
+// in both lists), and the overwhelming majority of entries are money going out
+// -- the default that is wrong the least.
 func tipoDe(c Categoria) Tipo {
 	if receitas[c] {
 		return Receita

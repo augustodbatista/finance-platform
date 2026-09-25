@@ -8,30 +8,32 @@ import (
 	"time"
 )
 
-// ErrDataInvalida indica data reconhecida na forma mas inexistente no calendario.
-var ErrDataInvalida = errors.New("parser: data invalida")
+// ErrDataInvalida reports a date that matches the format but does not exist on
+// the calendar.
+var ErrDataInvalida = errors.New("parser: invalid date")
 
-// reData casa dd/mm, dd/mm/aa e dd/mm/aaaa.
+// reData matches dd/mm, dd/mm/yy and dd/mm/yyyy.
 //
-// O ano de 4 digitos vem primeiro na alternancia de proposito: com \d{2} na
-// frente, "2026" casaria como "20" e sobraria "26" solto na string -- que o
-// extrator de valor engoliria como se fosse dinheiro.
+// The 4-digit year comes first in the alternation on purpose: with \d{2} first,
+// "2026" would match as "20" and leave "26" loose in the string -- which the
+// amount extractor would then swallow as if it were money.
 var reData = regexp.MustCompile(`\b(\d{1,2})/(\d{1,2})(?:/(\d{4}|\d{2}))?\b`)
 
-// reRelativa casa as palavras de data relativa, ja normalizadas.
+// reRelativa matches the relative date words ("today", "yesterday"), already
+// normalized.
 var reRelativa = regexp.MustCompile(`\b(hoje|ontem)\b`)
 
-// extrairData devolve a data da compra e a entrada sem o token de data.
+// extrairData returns the purchase date and the input without the date token.
 //
-// Espera a entrada ja normalizada (ver normalizar), porque casa palavra por
-// texto exato: "ONTEM" nao casaria com o padrao em minusculas.
+// It expects normalized input (see normalizar), because it matches words by
+// exact text: "ONTEM" would not match the lowercase pattern.
 //
-// Devolver a entrada limpa nao e conveniencia: e correcao. A regra "vale o
-// ultimo numero" faria "mercado 120 15/03" virar R$ 0,03 se o token de data
-// continuasse na string quando o valor fosse extraido.
+// Returning the cleaned input is not a convenience, it is correctness. The
+// "last number wins" rule would turn "mercado 120 15/03" into R$ 0,03 if the
+// date token were still in the string when the amount is extracted.
 //
-// A data volta truncada na meia-noite: para saber em que fatura a compra caiu,
-// a hora nao acrescenta nada e so atrapalharia comparacao.
+// The date is truncated to midnight: to know which statement a purchase landed
+// on, the time of day adds nothing and would only get in the way of comparing.
 func extrairData(entrada string, agora time.Time) (time.Time, string, error) {
 	hoje := time.Date(agora.Year(), agora.Month(), agora.Day(), 0, 0, 0, 0, agora.Location())
 
@@ -54,7 +56,7 @@ func extrairData(entrada string, agora time.Time) (time.Time, string, error) {
 	return hoje, entrada, nil
 }
 
-// dataExplicita monta a data a partir dos grupos casados por reData.
+// dataExplicita builds the date from the groups matched by reData.
 func dataExplicita(m []string, hoje time.Time) (time.Time, error) {
 	dia, _ := strconv.Atoi(m[1])
 	mes, _ := strconv.Atoi(m[2])
@@ -70,15 +72,15 @@ func dataExplicita(m []string, hoje time.Time) (time.Time, error) {
 
 	data := time.Date(ano, time.Month(mes), dia, 0, 0, 0, 0, hoje.Location())
 
-	// time.Date normaliza em vez de recusar: 30/02 vira 02/03. Comparar de
-	// volta e o jeito da stdlib de detectar data que nao existe.
+	// time.Date normalizes instead of refusing: 30/02 becomes 02/03. Comparing
+	// back is the standard library's way to detect a date that does not exist.
 	if data.Year() != ano || data.Month() != time.Month(mes) || data.Day() != dia {
 		return time.Time{}, ErrDataInvalida
 	}
 
-	// Sem ano informado, dd/mm resolve para a ocorrencia passada mais recente:
-	// em 15/01, "20/12" e dezembro do ano anterior. Lancamento atrasado e
-	// rotina; lancamento com data no futuro quase sempre e engano.
+	// With no year given, dd/mm resolves to the most recent past occurrence:
+	// on January 15, "20/12" is December of the previous year. Logging late is
+	// routine; logging with a future date is almost always a mistake.
 	if m[3] == "" && data.After(hoje) {
 		data = data.AddDate(-1, 0, 0)
 	}

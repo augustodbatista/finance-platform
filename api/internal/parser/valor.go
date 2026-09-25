@@ -8,37 +8,38 @@ import (
 )
 
 var (
-	// ErrSemValor indica entrada sem nenhum numero reconhecivel.
-	ErrSemValor = errors.New("parser: entrada sem valor monetario")
-	// ErrValorInvalido indica numero presente mas fora da faixa representavel.
-	ErrValorInvalido = errors.New("parser: valor monetario invalido")
-	// ErrValorNaoPositivo indica valor zero, que nao descreve lancamento algum.
-	ErrValorNaoPositivo = errors.New("parser: valor deve ser maior que zero")
-	// ErrEntradaLonga indica entrada acima de MaxEntrada.
-	ErrEntradaLonga = errors.New("parser: entrada longa demais")
+	// ErrSemValor reports input with no recognizable number.
+	ErrSemValor = errors.New("parser: no monetary amount in input")
+	// ErrValorInvalido reports a number that is present but out of range.
+	ErrValorInvalido = errors.New("parser: invalid monetary amount")
+	// ErrValorNaoPositivo reports a zero amount, which describes no entry.
+	ErrValorNaoPositivo = errors.New("parser: amount must be greater than zero")
+	// ErrEntradaLonga reports input longer than MaxEntrada.
+	ErrEntradaLonga = errors.New("parser: input too long")
 )
 
-// MaxEntrada limita o tamanho da entrada, em bytes.
+// MaxEntrada caps the input size, in bytes.
 //
-// O parser recebe string livre do usuario, e isso e fronteira de confianca: sem
-// teto, uma entrada de megabytes vira trabalho proporcional em CPU e memoria.
-// O regexp do Go e RE2 e nao sofre ReDoS, mas linear sobre entrada gigante
-// ainda e gigante. 200 bytes sobram para qualquer lancamento de uma linha.
+// The parser receives free text from the user, and that is a trust boundary:
+// without a ceiling, a megabyte-sized input becomes proportional CPU and memory
+// work. Go's regexp is RE2 and immune to ReDoS, but linear over huge input is
+// still huge. 200 bytes is plenty for any one-line entry.
 const MaxEntrada = 200
 
-// reValor casa um numero monetario em pt-BR: digitos, pontos de milhar e uma
-// parte decimal opcional depois da virgula. Casa o token inteiro de uma vez
-// ("1.234,56") em vez de pedacos, para nao fatiar numero malformado em dois.
+// reValor matches a pt-BR monetary number: digits, thousands dots and an
+// optional decimal part after the comma. It matches the whole token at once
+// ("1.234,56") rather than pieces, so a malformed number is never split in two.
 //
-// O regexp do Go e RE2: linear, sem backtracking. Entrada hostil nao vira
-// ReDoS aqui, e trocar por uma lib com backtracking perderia essa garantia.
+// Go's regexp is RE2: linear, no backtracking. Hostile input cannot turn into
+// ReDoS here, and swapping in a backtracking library would lose that guarantee.
 var reValor = regexp.MustCompile(`\d[\d.]*(?:,\d+)?`)
 
-// extrairCentavos devolve o valor da entrada, em centavos.
+// extrairCentavos returns the input's amount, in cents.
 //
-// Regras de pt-BR: virgula e separador decimal, ponto e separador de milhar.
-// Havendo mais de um numero, vale o ultimo -- "2 cafes 15" e R$ 15,00. E uma
-// regra que nunca rejeita nem pergunta, porque perguntar custa o habito.
+// pt-BR rules: the comma is the decimal separator, the dot is the thousands
+// separator. When there is more than one number, the last one wins -- "2 cafes
+// 15" is R$ 15,00. It is a rule that never rejects and never asks, because
+// asking costs the habit.
 func extrairCentavos(entrada string) (int64, error) {
 	numeros := reValor.FindAllString(entrada, -1)
 	if len(numeros) == 0 {
@@ -47,13 +48,13 @@ func extrairCentavos(entrada string) (int64, error) {
 
 	inteiro, decimais, _ := strings.Cut(numeros[len(numeros)-1], ",")
 
-	// Pontos sao separador de milhar e nao carregam informacao: 1.234 e 1234.
-	// Nao ha guarda para inteiro vazio: reValor exige digito inicial, entao a
-	// parte antes da virgula sempre tem ao menos um digito que sobrevive a
-	// remocao dos pontos. Guarda inalcancavel mente sobre o que pode acontecer.
+	// Dots are thousands separators and carry no information: 1.234 is 1234.
+	// There is no guard for an empty integer part: reValor requires a leading
+	// digit, so the part before the comma always keeps at least one digit after
+	// the dots are removed. An unreachable guard lies about what can happen.
 	inteiro = strings.ReplaceAll(inteiro, ".", "")
 
-	// Centavos tem exatamente duas casas: "5" vira "50", "555" vira "55".
+	// Cents have exactly two digits: "5" becomes "50", "555" becomes "55".
 	switch {
 	case len(decimais) == 0:
 		decimais = "00"
@@ -63,8 +64,8 @@ func extrairCentavos(entrada string) (int64, error) {
 		decimais = decimais[:2]
 	}
 
-	// Montar a string de centavos e converter de uma vez deixa o overflow por
-	// conta do ParseInt, em vez de uma multiplicacao que estoura em silencio.
+	// Building the cents string and converting once leaves overflow to
+	// ParseInt, instead of a multiplication that overflows silently.
 	centavos, err := strconv.ParseInt(inteiro+decimais, 10, 64)
 	if err != nil {
 		return 0, ErrValorInvalido

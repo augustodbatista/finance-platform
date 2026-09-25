@@ -8,35 +8,37 @@ import (
 	"github.com/augustodbatista/finance-platform/api/internal/fatura"
 )
 
-// reParcelas casa "3x", "3 x" e "12x1200".
+// reParcelas matches "3x", "3 x" and "12x1200".
 //
-// Sem \b no fim de proposito: com ele, "12x1200" nao casaria, porque entre o
-// "x" e o "1" nao ha fronteira de palavra -- e o token ficaria na string para
-// o extrator de valor confundir.
+// No trailing \b on purpose: with it, "12x1200" would not match, because there
+// is no word boundary between the "x" and the "1" -- and the token would stay
+// in the string for the amount extractor to misread.
 var reParcelas = regexp.MustCompile(`\b(\d+)\s*x`)
 
-// extrairParcelas devolve o numero de parcelas e a entrada sem o token.
+// extrairParcelas returns the number of installments and the input without
+// the token.
 //
-// Ausencia de token significa uma parcela, nao zero: assim somar parcelas
-// funciona igual para compra a vista e parcelada, sem caso especial.
+// No token means one installment, not zero: that way summing installments
+// works the same for single and installment purchases, with no special case.
 //
-// Devolver a entrada limpa e correcao, nao conveniencia. A regra "vale o
-// ultimo numero" faria "300 mercado 3x" virar R$ 3,00 se o token continuasse
-// na string na hora de extrair o valor.
+// Returning the cleaned input is correctness, not convenience. The "last
+// number wins" rule would turn "300 mercado 3x" into R$ 3,00 if the token were
+// still in the string when the amount is extracted.
 //
-// O teto e o erro vem de fatura, e nao daqui: quantas parcelas um cartao
-// aceita e regra de cartao, nao de texto. Duplicar o limite nos dois pacotes
-// seria duas verdades sobre a mesma coisa, prontas para divergir.
+// The ceiling and the error come from package fatura, not from here: how many
+// installments a card accepts is a card rule, not a text rule. Duplicating the
+// limit in both packages would be two truths about the same thing, ready to
+// drift apart.
 //
-// Espera a entrada ja normalizada (ver normalizar).
+// Expects normalized input (see normalizar).
 func extrairParcelas(entrada string) (int, string, error) {
 	m := reParcelas.FindStringSubmatch(entrada)
 	if m == nil {
 		return 1, entrada, nil
 	}
 
-	// Atoi tambem falha por estouro, e nao so por texto invalido: um numero de
-	// 23 digitos cai aqui em vez de virar lixo silencioso.
+	// Atoi also fails on overflow, not only on invalid text: a 23-digit number
+	// ends up here instead of becoming silent garbage.
 	parcelas, err := strconv.Atoi(m[1])
 	if err != nil || parcelas < 1 || parcelas > fatura.MaxParcelas {
 		return 0, "", fatura.ErrParcelasInvalidas

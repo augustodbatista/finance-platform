@@ -1,14 +1,14 @@
-// Package parser converte a entrada em linguagem natural do usuario
-// ("120 mercado") em um lancamento estruturado.
+// Package parser turns the user's natural-language input ("120 mercado") into
+// a structured entry.
 //
-// E dominio puro: sem I/O, sem banco, sem rede. A tese do produto e que atrito
-// mata habito, entao este pacote e o caminho mais curto entre o que o usuario
-// digita e um lancamento salvo.
+// Pure domain: no I/O, no database, no network. The product thesis is that
+// friction kills habit, so this package is the shortest path between what the
+// user types and a saved entry.
 package parser
 
 import "time"
 
-// Tipo distingue entrada de saida de dinheiro.
+// Tipo tells money coming in from money going out.
 type Tipo string
 
 const (
@@ -16,45 +16,45 @@ const (
 	Receita Tipo = "receita"
 )
 
-// Lancamento e o resultado estruturado de uma entrada do usuario.
+// Lancamento is the structured result of one user input.
 //
-// Centavos e int64 de proposito: dinheiro em float64 corrompe saldo
-// silenciosamente (0.1 + 0.2 != 0.3). A formatacao para exibicao acontece na
-// borda de apresentacao, nunca aqui.
+// Centavos is int64 on purpose: money in float64 silently corrupts balances
+// (0.1 + 0.2 != 0.3). Formatting for display happens at the presentation
+// edge, never here.
 type Lancamento struct {
 	Centavos  int64
 	Categoria Categoria
 	Tipo      Tipo
-	// Data e a data da compra, nao a do registro: quem lanca "ontem" quer que
-	// o gasto conte no dia em que aconteceu.
+	// Data is the purchase date, not the date it was recorded: whoever logs a
+	// purchase "ontem" (yesterday) wants it to count on the day it happened.
 	Data time.Time
-	// Forma fica vazia quando o usuario nao disse. Ver FormaNaoInformada.
+	// Forma is empty when the user did not say. See FormaNaoInformada.
 	Forma FormaPagamento
-	// Parcelas e 1 para compra a vista. Centavos continua sendo o TOTAL; quem
-	// reparte em parcelas e quem sabe a data de fechamento do cartao, no
-	// pacote fatura.
+	// Parcelas is 1 for a single payment. Centavos is still the TOTAL; splitting
+	// into installments belongs to whoever knows the card's closing day, in
+	// package fatura.
 	Parcelas int
 }
 
-// Parse converte a entrada do usuario em um Lancamento.
+// Parse turns the user's input into a Lancamento.
 //
-// O relogio entra como parametro em vez de sair de time.Now() aqui dentro.
-// Sem isso a funcao deixaria de ser pura e "ontem" mudaria de resultado
-// conforme o dia em que rodasse -- inclusive nos testes.
+// The clock comes in as a parameter instead of time.Now() being called in
+// here. Otherwise the function would no longer be pure and "ontem" would give
+// a different result depending on the day it ran -- tests included.
 //
-// A entrada e string livre vinda do usuario, entao o teto de tamanho e checado
-// antes de qualquer trabalho: e a fronteira de confianca do dominio.
+// The input is free text from the user, so the size ceiling is checked before
+// any work: this is the domain's trust boundary.
 //
-// A ordem importa. Os tokens que contem digitos mas nao sao dinheiro saem da
-// string ANTES da extracao do valor, senao a regra "vale o ultimo numero"
-// pegaria o pedaco errado: "mercado 120 15/03" viraria R$ 0,03.
+// Order matters. Tokens that contain digits but are not money are removed from
+// the string BEFORE the amount is extracted; otherwise the "last number wins"
+// rule would pick the wrong piece: "mercado 120 15/03" would become R$ 0,03.
 func Parse(entrada string, agora time.Time) (Lancamento, error) {
 	if len(entrada) > MaxEntrada {
 		return Lancamento{}, ErrEntradaLonga
 	}
 
-	// Normalizar uma vez, no inicio: daqui para baixo todo mundo trabalha
-	// sobre a mesma string, sem caixa nem acento para atrapalhar.
+	// Normalize once, up front: from here on everything works on the same
+	// string, with no case or accents getting in the way.
 	data, resto, err := extrairData(normalizar(entrada), agora)
 	if err != nil {
 		return Lancamento{}, err
@@ -72,9 +72,9 @@ func Parse(entrada string, agora time.Time) (Lancamento, error) {
 
 	categoria := classificar(resto)
 
-	// Inferencia preenche lacuna, nao sobrescreve o usuario: so cartao de
-	// credito parcela, mas quem digitou outra forma merece ser corrigido na
-	// tela, nao contrariado em silencio aqui.
+	// Inference fills a gap, it does not override the user: only credit cards
+	// allow installments, but whoever typed another method deserves to be
+	// corrected on screen, not silently contradicted here.
 	forma := formaDe(resto)
 	if parcelas > 1 && forma == FormaNaoInformada {
 		forma = Credito
