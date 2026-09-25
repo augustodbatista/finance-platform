@@ -217,6 +217,29 @@ conta e pagamento de fatura.
 pacote de texto só pelo tipo. Move para um pacote de domínio próprio no dia em
 que um terceiro consumidor aparecer — hoje seria renomeação sem contrapartida.
 
+### `api/internal/armazem` — persistência em arquivo JSON
+
+Guarda os lançamentos num arquivo JSON local ([ADR-0001](docs/decisions/adr-0001-mvp-binario-go.md)).
+`Abrir`, `Adicionar`, `Listar` (mais recente primeiro, devolve cópia), `Remover`.
+Seguro para uso concorrente. Cobertura 90,4%.
+
+Garantias, todas com teste:
+
+- **Escrita atômica:** temporário no mesmo diretório + `rename`. Queda no meio da
+  gravação deixa o arquivo antigo inteiro, nunca pela metade.
+- **Memória só muda depois que o disco confirma.** Se gravar falha, memória e
+  disco seguem iguais — a tela nunca mostra um lançamento que some no reinício.
+- **Arquivo corrompido é erro, nunca "começar vazio"**: o próximo `Adicionar`
+  sobrescreveria tudo. O arquivo fica intacto para recuperação.
+- **ID nunca é reaproveitado** (`proximo_id` persistido): um DELETE atrasado não
+  apaga o registro errado.
+- Permissão `0600`: dado financeiro, só o dono lê.
+- Guarda o **texto original** digitado — é a melhor descrição que existe.
+
+Descoberto e declarado: falhas de serializar, write, sync, close e chmod do
+temporário. Não induzíveis sem mock de filesystem, e o mock seria interface com
+uma implementação só.
+
 ## Design Patterns e Convenções
 
 - **Dinheiro é `int64` em centavos. Nunca `float64`.** `0.1 + 0.2 != 0.3` em ponto
@@ -339,6 +362,14 @@ Toda pegadinha nova entra aqui **antes** de seguir.
   nesse intervalo faz um run velho parecer o atual (já levou a diagnosticar uma
   falha que tinha sido corrigida). Filtrar pelo commit:
   `gh run list --commit $(git rev-parse HEAD)`.
+- **Os campos de `parser.Lancamento` são formato de arquivo.** `armazem` serializa o
+  struct sem tags JSON, então renomear um campo (`Centavos` → `Valor`) faz o
+  arquivo existente ser lido com o campo zerado — **sem erro**. Renomear exige
+  tag `json:"nome_antigo"` ou migração do arquivo.
+- **Rodar o lint localmente antes do push**, porque errcheck/gosec reprovam coisas
+  que o `go vet` deixa passar (já pegou `defer os.Remove` e `Close` sem checar):
+  `go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run ./...`
+  (em `api/`; a primeira execução baixa as dependências do linter, não do projeto).
 - **Os jobs Flutter do CI ficam dormentes até `app/` existir** (o `paths-filter` os
   desliga). É deliberado, não acidente: o primeiro commit em `app/` provavelmente
   acusa problema de config, e esse ajuste faz parte daquele commit.
