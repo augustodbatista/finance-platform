@@ -7,6 +7,7 @@
   --marca: #0f766e;
   --receita: #15803d;
   --despesa: #b91c1c;
+  --pendente: #b45309;
   color-scheme: light;
 }
 
@@ -20,11 +21,17 @@
     --marca: #2dd4bf;
     --receita: #4ade80;
     --despesa: #f87171;
+    --pendente: #fbbf24;
     color-scheme: dark;
   }
 }
 
 * { box-sizing: border-box; }
+
+/* An element with the hidden attribute stays hidden even when a rule gives it a
+   display value (form.pagar is display:flex): without this, the pay form showed
+   up open on every bill. */
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
@@ -106,7 +113,8 @@ button:disabled { opacity: 0.6; }
 
 .numeros {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* 2 per row on a phone, 4 per row with room. */
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
   gap: 0.5rem;
   margin: 1rem 0 0;
 }
@@ -130,6 +138,31 @@ h3 {
   color: var(--suave);
   margin: 1.25rem 0 0.5rem;
 }
+
+.conta-opcao { margin-top: 0.5rem; flex-wrap: wrap; gap: 0.75rem; }
+label.opcao {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem; /* the whole label is the touch target: >= 44px */
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--texto);
+}
+label.opcao input[type="checkbox"] { width: 1.15rem; height: 1.15rem; accent-color: var(--marca); }
+input[type="date"] {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  background: var(--fundo);
+  color: var(--texto);
+}
+
+.alerta { color: var(--despesa); font-weight: 600; margin: 0.75rem 0 0; }
 
 #categorias { list-style: none; margin: 0; padding: 0; }
 #categorias li {
@@ -162,6 +195,36 @@ h3 {
 .meta { grid-column: 1; font-size: 0.8rem; color: var(--suave); }
 .valor { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .valor.receita { color: var(--receita); }
+.situacao { grid-column: 1 / -1; font-size: 0.85rem; font-weight: 600; }
+.situacao.a_pagar { color: var(--pendente); }
+.situacao.vencida { color: var(--despesa); }
+.situacao.paga { color: var(--receita); }
+.acoes { grid-column: 1 / -1; }
+/* Not a card: undo the frame every form/section gets above. */
+form.pagar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+form.pagar input[type="text"] {
+  flex: 0 1 7rem;
+  font-size: 1rem;
+  padding: 0.4rem 0.5rem;
+}
+button.secundario {
+  background: transparent;
+  color: var(--texto);
+  border: 1px solid var(--borda);
+  padding: 0.45rem 0.8rem;
+  font-weight: 500;
+}
+form.pagar .erro { flex-basis: 100%; }
+
 .apagar {
   grid-row: span 2;
   background: transparent;

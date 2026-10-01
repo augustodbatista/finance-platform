@@ -302,8 +302,18 @@ mock would be an interface with a single implementation.
 ### `api/internal/web` — HTTP and the MVP page
 
 `Novo(Config) http.Handler`. Routes: `GET /` (page), `GET/POST /api/lancamentos`,
-`DELETE /api/lancamentos/{id}`, `GET /api/resumo?mes=YYYY-MM` (totals plus
-`categorias`, always an array, never `null`). The page (`static/`)
+`DELETE /api/lancamentos/{id}`, `POST`/`DELETE /api/lancamentos/{id}/pagamento`
+(pay a bill with `{"data","valor"}` / undo), `GET /api/resumo?mes=YYYY-MM` (totals,
+`categorias` -- always an array, never `null` --, `a_pagar` and `vencidas`, the
+latter across every month).
+
+`POST /api/lancamentos` takes an optional `vencimento` (YYYY-MM-DD) that makes the
+entry a bill. Each entry carries `situacao` (`""`, `a_pagar`, `vencida`, `paga`),
+computed on the server with its clock so the screen never decides by itself
+whether a bill is overdue. The paid amount goes through `parser.Valor`, the same
+pt-BR reading as entries. Every write endpoint reads its body through `lerJSON`,
+which carries the CSRF and body-size protections, so a new endpoint cannot forget
+them. The page (`static/`)
 is embedded in the binary. 98.9% coverage.
 
 Attack surfaces and their handling, all tested:
@@ -469,6 +479,12 @@ Every new gotcha goes here **before** moving on.
   writes real financial data into the repo -- one `git add -A` away from a public
   GitHub. `dados*.json` is now gitignored; for real use, point `FINANCE_DADOS`
   outside the repository (the Windows setup uses `%USERPROFILE%\FinancePlatform`).
+- **`[hidden]` loses to any `display` rule.** `form.pagar { display: flex }` made
+  the pay form show up open on every bill: the browser's own `[hidden]` style is
+  weaker than an author rule. `app.css` has `[hidden] { display: none !important; }`.
+  JavaScript checks of the element I had clicked passed; only a screenshot of the
+  whole list showed it. When checking UI state, check every item, not only the one
+  you touched.
 - **Bash heredocs in the agent shell sometimes break on quotes** ("unexpected EOF
   while looking for matching `''"), especially Python or JSON with backslashes. Write
   the script or file with the editor tool and run it, instead of inlining it.

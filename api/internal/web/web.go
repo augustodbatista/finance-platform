@@ -65,6 +65,8 @@ func Novo(c Config) http.Handler {
 	mux.HandleFunc("GET /api/lancamentos", s.listar)
 	mux.HandleFunc("POST /api/lancamentos", s.lancar)
 	mux.HandleFunc("DELETE /api/lancamentos/{id}", s.remover)
+	mux.HandleFunc("POST /api/lancamentos/{id}/pagamento", s.pagar)
+	mux.HandleFunc("DELETE /api/lancamentos/{id}/pagamento", s.desfazerPagamento)
 	mux.HandleFunc("GET /api/resumo", s.resumo)
 
 	return cabecalhos(autenticar(c.Senha, mux))
@@ -81,42 +83,58 @@ type registroJSON struct {
 	Data      string `json:"data"`
 	Forma     string `json:"forma"`
 	Parcelas  int    `json:"parcelas"`
+	// Bill fields. Situacao is "" for a regular entry, or a_pagar, vencida or
+	// paga. It is computed here, with the server's clock, so the screen never
+	// decides on its own whether a bill is overdue.
+	Vencimento string         `json:"vencimento,omitempty"`
+	Situacao   string         `json:"situacao"`
+	Pagamento  *pagamentoJSON `json:"pagamento,omitempty"`
 }
 
-func paraJSON(r armazem.Registro) registroJSON {
+type pagamentoJSON struct {
+	Data     string `json:"data"`
+	Centavos int64  `json:"centavos"`
+}
+
+func (s *servidor) paraJSON(r armazem.Registro) registroJSON {
 	l := r.Lancamento
-	return registroJSON{
+	out := registroJSON{
 		ID: r.ID, Texto: r.Texto, Centavos: l.Centavos,
 		Categoria: string(l.Categoria), Tipo: string(l.Tipo),
 		Data: l.Data.Format(time.DateOnly), Forma: string(l.Forma), Parcelas: l.Parcelas,
 	}
+	if !l.EConta() {
+		return out
+	}
+	out.Vencimento = l.Vencimento.Format(time.DateOnly)
+	switch {
+	case l.Pago():
+		out.Situacao = "paga"
+		out.Pagamento = &pagamentoJSON{l.Pagamento.Data.Format(time.DateOnly), l.Pagamento.Centavos}
+	case l.Vencida(s.Agora()):
+		out.Situacao = "vencida"
+	default:
+		out.Situacao = "a_pagar"
+	}
+	return out
 }
 
 func (s *servidor) listar(w http.ResponseWriter, _ *http.Request) {
 	rs := s.Armazem.Listar()
 	out := make([]registroJSON, 0, len(rs)) // [] rather than null: the front end iterates it
 	for _, r := range rs {
-		out = append(out, paraJSON(r))
+		out = append(out, s.paraJSON(r))
 	}
 	responder(w, http.StatusOK, out)
 }
 
 func (s *servidor) lancar(w http.ResponseWriter, r *http.Request) {
-	if mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); mt != "application/json" {
-		falhar(w, http.StatusUnsupportedMediaType, "Envie application/json.")
-		return
-	}
-
 	var corpo struct {
 		Texto string `json:"texto"`
+		// Vencimento (YYYY-MM-DD) marks the entry as a bill still to pay.
+		Vencimento string `json:"vencimento"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxCorpo)).Decode(&corpo); err != nil {
-		var grande *http.MaxBytesError
-		if errors.As(err, &grande) {
-			falhar(w, http.StatusRequestEntityTooLarge, "Texto longo demais.")
-			return
-		}
-		falhar(w, http.StatusBadRequest, "JSON inválido.")
+	if !lerJSON(w, r, &corpo) {
 		return
 	}
 
@@ -125,19 +143,29 @@ func (s *servidor) lancar(w http.ResponseWriter, r *http.Request) {
 		falhar(w, http.StatusBadRequest, mensagem(err))
 		return
 	}
+	if corpo.Vencimento != "" {
+		venc, err := time.ParseInLocation(time.DateOnly, corpo.Vencimento, s.Agora().Location())
+		if err != nil {
+			falhar(w, http.StatusBadRequest, "Data de vencimento inválida.")
+			return
+		}
+		if l, err = l.ComoConta(venc); err != nil {
+			falhar(w, http.StatusBadRequest, mensagem(err))
+			return
+		}
+	}
 
 	reg, err := s.Armazem.Adicionar(corpo.Texto, l)
 	if err != nil {
 		falhar(w, http.StatusInternalServerError, "Não consegui salvar. Nada foi gravado.")
 		return
 	}
-	responder(w, http.StatusCreated, paraJSON(reg))
+	responder(w, http.StatusCreated, s.paraJSON(reg))
 }
 
 func (s *servidor) remover(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		falhar(w, http.StatusBadRequest, "ID inválido.")
+	id, ok := idDaRota(w, r)
+	if !ok {
 		return
 	}
 	switch err := s.Armazem.Remover(id); {
@@ -178,12 +206,16 @@ func (s *servidor) resumo(w http.ResponseWriter, r *http.Request) {
 	for _, c := range res.Categorias {
 		categorias = append(categorias, categoriaJSON{string(c.Categoria), c.Centavos})
 	}
+	// Overdue bills are counted across every month, not just the one on screen.
+	qtdVencidas, centavosVencidas := resumo.Vencidas(ls, s.Agora())
 	responder(w, http.StatusOK, map[string]any{
 		"mes":        ref.Format("2006-01"),
 		"receitas":   res.ReceitasCentavos,
 		"despesas":   res.DespesasCentavos,
 		"economia":   res.EconomiaCentavos,
 		"categorias": categorias,
+		"a_pagar":    res.APagarCentavos,
+		"vencidas":   map[string]int64{"quantidade": int64(qtdVencidas), "centavos": centavosVencidas},
 	})
 }
 
@@ -207,9 +239,48 @@ func mensagem(err error) string {
 		return "Número de parcelas inválido (de 1 a 99)."
 	case errors.Is(err, parser.ErrEntradaLonga):
 		return "Texto longo demais."
+	case errors.Is(err, dominio.ErrContaNoCredito):
+		return "Compras no crédito são pagas pela fatura. Desmarque “ainda vou pagar”."
+	case errors.Is(err, dominio.ErrContaReceita):
+		return "Uma receita não pode ser conta a pagar."
+	case errors.Is(err, dominio.ErrNaoEConta):
+		return "Esse lançamento não é uma conta a pagar."
+	case errors.Is(err, dominio.ErrPagamentoNoFuturo):
+		return "A data de pagamento não pode ser no futuro."
 	default:
 		return "Não entendi esse lançamento."
 	}
+}
+
+// lerJSON decodes the request body into dst, with the protections every write
+// endpoint needs: Content-Type must be application/json (CSRF: a form on
+// another site cannot send it without a CORS preflight) and the body is capped
+// at maxCorpo. On failure it answers the client and returns false.
+func lerJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	if mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); mt != "application/json" {
+		falhar(w, http.StatusUnsupportedMediaType, "Envie application/json.")
+		return false
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxCorpo)).Decode(dst); err != nil {
+		var grande *http.MaxBytesError
+		if errors.As(err, &grande) {
+			falhar(w, http.StatusRequestEntityTooLarge, "Texto longo demais.")
+			return false
+		}
+		falhar(w, http.StatusBadRequest, "JSON inválido.")
+		return false
+	}
+	return true
+}
+
+// idDaRota reads {id} from the route. On failure it answers 400 and returns false.
+func idDaRota(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		falhar(w, http.StatusBadRequest, "ID inválido.")
+		return 0, false
+	}
+	return id, true
 }
 
 func responder(w http.ResponseWriter, status int, v any) {

@@ -412,3 +412,35 @@ func TestParse_CategoriaReceita(t *testing.T) {
 		})
 	}
 }
+
+// Valor reads just an amount, with the same pt-BR rules as Parse. Used when the
+// user types the amount actually paid for a bill.
+func TestValor(t *testing.T) {
+	casos := []struct {
+		texto string
+		quero int64
+	}{
+		{"185,40", 18540},
+		{"R$ 1.234,56", 123456},
+		{"180", 18000},
+		{" 42,5 ", 4250},
+	}
+	for _, c := range casos {
+		got, err := parser.Valor(c.texto)
+		if err != nil || got != c.quero {
+			t.Errorf("Valor(%q) = %d, %v; want %d", c.texto, got, err, c.quero)
+		}
+	}
+
+	for texto, quero := range map[string]error{
+		"":                       parser.ErrSemValor,
+		"abc":                    parser.ErrSemValor,
+		"0,00":                   parser.ErrValorNaoPositivo,
+		"99999999999999999999":   parser.ErrValorInvalido,
+		strings.Repeat("1", 201): parser.ErrEntradaLonga,
+	} {
+		if _, err := parser.Valor(texto); !errors.Is(err, quero) {
+			t.Errorf("Valor(%.20q) error = %v, want %v", texto, err, quero)
+		}
+	}
+}

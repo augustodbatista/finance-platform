@@ -1,6 +1,7 @@
 package dominio
 
 import (
+	"cmp"
 	"errors"
 	"time"
 )
@@ -57,20 +58,35 @@ func (l Lancamento) ComoConta(vencimento time.Time) (Lancamento, error) {
 // Pagar records the payment of a bill. Paying again replaces the previous
 // payment, so a wrong date or amount can be corrected.
 //
-// hoje may carry a time of day; only its date matters. A payment cannot be
-// dated after today: "paid" means it already happened.
+// A payment cannot be dated after today: "paid" means it already happened.
+// Like Vencida, this compares calendar days, not instants.
 func (l Lancamento) Pagar(data time.Time, centavos int64, hoje time.Time) (Lancamento, error) {
-	diaDeHoje := time.Date(hoje.Year(), hoje.Month(), hoje.Day(), 0, 0, 0, 0, hoje.Location())
 	switch {
 	case !l.EConta():
 		return Lancamento{}, ErrNaoEConta
 	case centavos <= 0:
 		return Lancamento{}, ErrPagamentoInvalido
-	case data.After(diaDeHoje):
+	case antesDe(hoje, data):
 		return Lancamento{}, ErrPagamentoNoFuturo
 	}
 	l.Pagamento = Pagamento{Data: data, Centavos: centavos}
 	return l, nil
+}
+
+// Vencida reports whether a bill is past due and still unpaid. A bill due
+// today is not overdue yet.
+//
+// Days are compared on the calendar (year, month, day), never as instants:
+// mixing time zones would make a bill due today look overdue.
+func (l Lancamento) Vencida(hoje time.Time) bool {
+	return l.EConta() && !l.Pago() && antesDe(l.Vencimento, hoje)
+}
+
+// antesDe reports whether day a comes before day b on the calendar.
+func antesDe(a, b time.Time) bool {
+	return cmp.Or(cmp.Compare(a.Year(), b.Year()),
+		cmp.Compare(a.Month(), b.Month()),
+		cmp.Compare(a.Day(), b.Day())) < 0
 }
 
 // DesfazerPagamento turns a paid bill back into a bill to pay.

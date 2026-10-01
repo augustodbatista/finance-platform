@@ -75,3 +75,13 @@ func extrairCentavos(entrada string) (int64, error) {
 	}
 	return centavos, nil
 }
+
+// Valor reads an amount on its own -- "185,40", "R$ 1.234,56" -- with the same
+// pt-BR rules and the same size limit as Parse. It exists so the amount paid
+// for a bill goes through exactly the parsing the entry itself went through.
+func Valor(texto string) (int64, error) {
+	if len(texto) > MaxEntrada {
+		return 0, ErrEntradaLonga
+	}
+	return extrairCentavos(texto)
+}

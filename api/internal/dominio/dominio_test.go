@@ -139,3 +139,50 @@ func TestPagar_HojeEmQualquerHorario(t *testing.T) {
 		t.Errorf("payment dated today rejected: %v", err)
 	}
 }
+
+func TestVencida(t *testing.T) {
+	hoje := time.Date(2026, time.October, 15, 23, 30, 0, 0, brt)
+	conta := func(venc time.Time) dominio.Lancamento {
+		c, err := despesaPix().ComoConta(venc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	paga, _ := conta(dia(2026, time.October, 1)).Pagar(dia(2026, time.October, 2), 18000, hoje)
+
+	casos := []struct {
+		nome  string
+		l     dominio.Lancamento
+		quero bool
+	}{
+		{"due yesterday, unpaid", conta(dia(2026, time.October, 14)), true},
+		{"due today", conta(dia(2026, time.October, 15)), false},
+		{"due tomorrow", conta(dia(2026, time.October, 16)), false},
+		{"overdue but paid", paga, false},
+		{"regular entry", despesaPix(), false},
+		// Calendar days, not instants: due today at UTC midnight is still
+		// today in Brasilia, even though that instant is 3 hours earlier.
+		{"due today in another time zone", conta(time.Date(2026, time.October, 15, 0, 0, 0, 0, time.UTC)), false},
+	}
+	for _, c := range casos {
+		t.Run(c.nome, func(t *testing.T) {
+			if got := c.l.Vencida(hoje); got != c.quero {
+				t.Errorf("Vencida = %v, want %v", got, c.quero)
+			}
+		})
+	}
+}
+
+// Same calendar rule as Vencida: a payment dated today is accepted even when
+// its midnight, in its own time zone, is a later instant than today's midnight
+// in Brasilia.
+func TestPagar_HojeEmOutroFuso(t *testing.T) {
+	hoje := time.Date(2026, time.October, 12, 12, 0, 0, 0, brt)
+	utcMenos5 := time.FixedZone("UTC-5", -5*60*60)
+	conta, _ := despesaPix().ComoConta(dia(2026, time.October, 10))
+
+	if _, err := conta.Pagar(time.Date(2026, time.October, 12, 0, 0, 0, 0, utcMenos5), 18000, hoje); err != nil {
+		t.Errorf("payment dated today (UTC-5) rejected: %v", err)
+	}
+}

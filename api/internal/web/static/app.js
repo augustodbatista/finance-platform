@@ -34,6 +34,14 @@ async function api(metodo, caminho, corpo) {
   return dados;
 }
 
+function hojeISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// "180,00" from cents: the format the user types, for pre-filling the paid amount.
+const valorDigitavel = (centavos) => (centavos / 100).toFixed(2).replace(".", ",");
+
 function mesAtual() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -44,6 +52,12 @@ async function carregarResumo() {
   $("receitas").textContent = reais(r.receitas);
   $("despesas").textContent = reais(r.despesas);
   $("economia").textContent = reais(r.economia);
+  $("a-pagar").textContent = reais(r.a_pagar);
+  const v = r.vencidas;
+  $("vencidas").hidden = v.quantidade === 0;
+  $("vencidas").textContent = v.quantidade === 1
+    ? `1 conta vencida: ${reais(v.centavos)}`
+    : `${v.quantidade} contas vencidas: ${reais(v.centavos)}`;
   mostrarCategorias(r.categorias, r.despesas);
 }
 
@@ -84,9 +98,11 @@ function item(l) {
   texto.className = "texto";
   texto.textContent = l.texto;
 
+  // A paid bill shows what was paid; the expected amount goes to the meta line.
+  const valorMostrado = l.pagamento ? l.pagamento.centavos : l.centavos;
   const valor = document.createElement("span");
   valor.className = l.tipo === "receita" ? "valor receita" : "valor";
-  valor.textContent = (l.tipo === "receita" ? "+" : "") + reais(l.centavos);
+  valor.textContent = (l.tipo === "receita" ? "+" : "") + reais(valorMostrado);
 
   const apagar = document.createElement("button");
   apagar.className = "apagar";
@@ -103,7 +119,116 @@ function item(l) {
   meta.textContent = partes.join(" · ");
 
   li.append(texto, valor, apagar, meta);
+  if (l.situacao) li.append(situacaoConta(l), acoesConta(l));
   return li;
+}
+
+const dataCurta = (iso) => dataBR.format(new Date(iso));
+
+// One line saying where the bill stands, colored by state.
+function situacaoConta(l) {
+  const el = document.createElement("span");
+  el.className = `situacao ${l.situacao}`;
+  if (l.situacao === "paga") {
+    let t = `Pago em ${dataCurta(l.pagamento.data)}`;
+    if (l.pagamento.centavos !== l.centavos) t += ` · previsto ${reais(l.centavos)}`;
+    el.textContent = t;
+  } else if (l.situacao === "vencida") {
+    el.textContent = `Vencida desde ${dataCurta(l.vencimento)}`;
+  } else {
+    el.textContent = `A pagar · vence ${dataCurta(l.vencimento)}`;
+  }
+  return el;
+}
+
+// "Pagar" opens a small form (date + amount, pre-filled with today and the
+// expected amount); a paid bill offers "Desfazer pagamento" instead.
+function acoesConta(l) {
+  const box = document.createElement("div");
+  box.className = "acoes";
+
+  if (l.situacao === "paga") {
+    const desfazer = document.createElement("button");
+    desfazer.type = "button";
+    desfazer.className = "secundario";
+    desfazer.textContent = "Desfazer pagamento";
+    desfazer.addEventListener("click", async () => {
+      if (!confirm(`Marcar "${l.texto}" como não paga?`)) return;
+      try {
+        await api("DELETE", `/api/lancamentos/${l.id}/pagamento`);
+        await atualizar();
+      } catch (e) {
+        $("erro").textContent = e.message;
+      }
+    });
+    box.append(desfazer);
+    return box;
+  }
+
+  const abrir = document.createElement("button");
+  abrir.type = "button";
+  abrir.className = "secundario";
+  abrir.textContent = "Pagar";
+
+  const form = document.createElement("form");
+  form.className = "pagar";
+  form.hidden = true;
+
+  const data = document.createElement("input");
+  data.type = "date";
+  data.required = true;
+  data.max = hojeISO();
+  data.value = hojeISO();
+  data.setAttribute("aria-label", "Data do pagamento");
+
+  const quanto = document.createElement("input");
+  quanto.type = "text";
+  quanto.inputMode = "decimal";
+  quanto.required = true;
+  quanto.value = valorDigitavel(l.centavos);
+  quanto.setAttribute("aria-label", "Valor pago");
+
+  const confirmar = document.createElement("button");
+  confirmar.type = "submit";
+  confirmar.textContent = "Confirmar";
+
+  const cancelar = document.createElement("button");
+  cancelar.type = "button";
+  cancelar.className = "secundario";
+  cancelar.textContent = "Cancelar";
+
+  // Errors appear next to the form: the main error line may be scrolled away.
+  const erro = document.createElement("p");
+  erro.className = "erro";
+  erro.setAttribute("role", "alert");
+
+  abrir.addEventListener("click", () => {
+    abrir.hidden = true;
+    form.hidden = false;
+    quanto.focus();
+  });
+  cancelar.addEventListener("click", () => {
+    form.hidden = true;
+    abrir.hidden = false;
+    erro.textContent = "";
+  });
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    erro.textContent = "";
+    confirmar.disabled = true;
+    try {
+      await api("POST", `/api/lancamentos/${l.id}/pagamento`, { data: data.value, valor: quanto.value });
+      await atualizar();
+    } catch (e) {
+      erro.textContent = e.message;
+    } finally {
+      confirmar.disabled = false;
+    }
+  });
+
+  form.append(data, quanto, confirmar, cancelar, erro);
+  box.append(abrir, form);
+  return box;
 }
 
 async function carregarLista() {
@@ -138,8 +263,15 @@ $("lancar").addEventListener("submit", async (ev) => {
   $("erro").textContent = "";
   botao.disabled = true;
   try {
-    await api("POST", "/api/lancamentos", { texto: campo.value });
+    const eConta = $("e-conta").checked;
+    await api("POST", "/api/lancamentos", {
+      texto: campo.value,
+      vencimento: eConta ? $("vencimento").value : "",
+    });
     campo.value = "";
+    // Most entries are regular: the option resets after each bill.
+    $("e-conta").checked = false;
+    mostrarVencimento();
     await atualizar();
   } catch (e) {
     // The text stays in the field so the user can fix it instead of retyping.
@@ -149,6 +281,15 @@ $("lancar").addEventListener("submit", async (ev) => {
     campo.focus();
   }
 });
+
+// The due date is only asked for, and required, when the entry is a bill.
+function mostrarVencimento() {
+  const eConta = $("e-conta").checked;
+  $("venc-campo").hidden = !eConta;
+  $("vencimento").required = eConta;
+  if (eConta && !$("vencimento").value) $("vencimento").value = hojeISO();
+}
+$("e-conta").addEventListener("change", mostrarVencimento);
 
 $("mes").value = mesAtual();
 $("mes").addEventListener("change", () => carregarResumo().catch((e) => { $("erro").textContent = e.message; }));

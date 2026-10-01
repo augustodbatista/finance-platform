@@ -21,6 +21,12 @@
                aria-describedby="dica erro">
         <button type="submit">Lançar</button>
       </div>
+      <div class="linha conta-opcao">
+        <label class="opcao"><input id="e-conta" type="checkbox"> Ainda vou pagar</label>
+        <label class="opcao" id="venc-campo" hidden>Vence em
+          <input id="vencimento" type="date">
+        </label>
+      </div>
       <p id="dica" class="dica">Ex.: <code>42,50 almoço</code> · <code>3x 300 tv</code> · <code>salário 3500</code> · <code>uber 18 ontem pix</code></p>
       <p id="erro" class="erro" role="alert" aria-live="assertive"></p>
     </form>
@@ -34,7 +40,9 @@
         <div><dt>Receitas</dt><dd id="receitas">–</dd></div>
         <div><dt>Despesas</dt><dd id="despesas">–</dd></div>
         <div><dt>Economia</dt><dd id="economia">–</dd></div>
+        <div><dt>A pagar</dt><dd id="a-pagar">–</dd></div>
       </dl>
+      <p id="vencidas" class="alerta" role="status" hidden></p>
       <p class="dica">Compras no crédito contam no mês da fatura, não no da compra.</p>
 
       <h3 id="t-categorias">Despesas por categoria</h3>
