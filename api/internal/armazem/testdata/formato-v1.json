@@ -1,0 +1,41 @@
+{
+  "proximo_id": 4,
+  "registros": [
+    {
+      "id": 1,
+      "texto": "salário 3500 pix",
+      "lancamento": {
+        "Centavos": 350000,
+        "Categoria": "salario",
+        "Tipo": "receita",
+        "Data": "2026-09-25T00:00:00-03:00",
+        "Forma": "pix",
+        "Parcelas": 1
+      }
+    },
+    {
+      "id": 2,
+      "texto": "3x 1.200 curso credito 12/09",
+      "lancamento": {
+        "Centavos": 120000,
+        "Categoria": "educacao",
+        "Tipo": "despesa",
+        "Data": "2026-09-12T00:00:00-03:00",
+        "Forma": "credito",
+        "Parcelas": 3
+      }
+    },
+    {
+      "id": 3,
+      "texto": "almoço 42,50 ontem",
+      "lancamento": {
+        "Centavos": 4250,
+        "Categoria": "alimentacao",
+        "Tipo": "despesa",
+        "Data": "2026-09-24T00:00:00-03:00",
+        "Forma": "",
+        "Parcelas": 1
+      }
+    }
+  ]
+}

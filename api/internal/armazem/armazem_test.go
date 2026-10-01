@@ -226,3 +226,59 @@ func TestRemover_FalhaDeGravacaoNaoAlteraMemoria(t *testing.T) {
 		t.Errorf("memory has %d records after a failed write, want 1", n)
 	}
 }
+
+// testdata/formato-v1.json was written by the code of September 2026 and is
+// the format of every real dados.json out there. Lancamento is serialized
+// without JSON tags, so renaming or moving a field would make old files load
+// with that field silently zeroed. This test fails first.
+func TestFormatoV1ContinuaLegivel(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("testdata", "formato-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := caminho(t)
+	// gosec G703 flags this as path traversal because the bytes come from a
+	// file. False positive: p is inside t.TempDir() and no user input is involved.
+	if err := os.WriteFile(p, b, 0o600); err != nil { //nolint:gosec
+		t.Fatal(err)
+	}
+
+	lista := abrir(t, p).Listar() // newest first
+	if len(lista) != 3 {
+		t.Fatalf("%d records, want 3", len(lista))
+	}
+
+	brt := time.FixedZone("BRT", -3*60*60)
+	want := []struct {
+		id        int64
+		texto     string
+		centavos  int64
+		categoria string
+		tipo      string
+		data      time.Time
+		forma     string
+		parcelas  int
+	}{
+		{3, "almoço 42,50 ontem", 4250, "alimentacao", "despesa", time.Date(2026, time.September, 24, 0, 0, 0, 0, brt), "", 1},
+		{2, "3x 1.200 curso credito 12/09", 120000, "educacao", "despesa", time.Date(2026, time.September, 12, 0, 0, 0, 0, brt), "credito", 3},
+		{1, "salário 3500 pix", 350000, "salario", "receita", time.Date(2026, time.September, 25, 0, 0, 0, 0, brt), "pix", 1},
+	}
+	for i, w := range want {
+		got := lista[i]
+		l := got.Lancamento
+		if got.ID != w.id || got.Texto != w.texto || l.Centavos != w.centavos ||
+			string(l.Categoria) != w.categoria || string(l.Tipo) != w.tipo ||
+			!l.Data.Equal(w.data) || string(l.Forma) != w.forma || l.Parcelas != w.parcelas {
+			t.Errorf("record %d = %+v, want %+v", i, got, w)
+		}
+	}
+
+	// The next ID survives too: a new entry must not reuse an old one.
+	r, err := abrir(t, p).Adicionar("10 mercado", lanc(t, "10 mercado"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.ID != 4 {
+		t.Errorf("new ID = %d, want 4 (proximo_id from the file)", r.ID)
+	}
+}
