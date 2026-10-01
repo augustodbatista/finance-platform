@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/augustodbatista/finance-platform/api/internal/dominio"
+	"github.com/augustodbatista/finance-platform/api/internal/fatura"
 )
 
 // ErrNaoEncontrado reports an ID that does not exist (or was already removed).
@@ -37,6 +38,10 @@ type conteudo struct {
 	// delayed DELETE would remove the wrong record.
 	ProximoID int64      `json:"proximo_id"`
 	Registros []Registro `json:"registros"`
+	// FaturasPagas holds credit card statement payments, one per statement
+	// month. omitempty: until a statement is paid, the file is written exactly
+	// as before this field existed.
+	FaturasPagas []fatura.Pagamento `json:"faturas_pagas,omitempty"`
 }
 
 // Armazem is safe for concurrent use.
@@ -73,10 +78,11 @@ func (a *Armazem) Adicionar(texto string, l dominio.Lancamento) (Registro, error
 	defer a.mu.Unlock()
 
 	r := Registro{ID: a.dados.ProximoID, Texto: texto, Lancamento: l}
-	novo := conteudo{
-		ProximoID: a.dados.ProximoID + 1,
-		Registros: append(slices.Clone(a.dados.Registros), r),
-	}
+	// Copy the whole content and change only what this operation touches, so
+	// fields it does not know about (paid statements) are carried along.
+	novo := a.dados
+	novo.ProximoID++
+	novo.Registros = append(slices.Clone(a.dados.Registros), r)
 	if err := a.gravar(novo); err != nil {
 		return Registro{}, err
 	}
@@ -103,10 +109,8 @@ func (a *Armazem) Remover(id int64) error {
 	if i < 0 {
 		return ErrNaoEncontrado
 	}
-	novo := conteudo{
-		ProximoID: a.dados.ProximoID,
-		Registros: slices.Delete(slices.Clone(a.dados.Registros), i, i+1),
-	}
+	novo := a.dados
+	novo.Registros = slices.Delete(slices.Clone(a.dados.Registros), i, i+1)
 	if err := a.gravar(novo); err != nil {
 		return err
 	}
@@ -135,12 +139,55 @@ func (a *Armazem) Alterar(id int64, f func(dominio.Lancamento) (dominio.Lancamen
 
 	registros := slices.Clone(a.dados.Registros)
 	registros[i].Lancamento = l
-	novo := conteudo{ProximoID: a.dados.ProximoID, Registros: registros}
+	novo := a.dados
+	novo.Registros = registros
 	if err := a.gravar(novo); err != nil {
 		return Registro{}, err
 	}
 	a.dados = novo
 	return registros[i], nil
+}
+
+// FaturasPagas returns a copy of the credit card statement payments.
+func (a *Armazem) FaturasPagas() []fatura.Pagamento {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return slices.Clone(a.dados.FaturasPagas)
+}
+
+// PagarFatura records the payment of a statement. Paying a statement that is
+// already paid replaces the payment, so a wrong date or amount can be fixed.
+func (a *Armazem) PagarFatura(p fatura.Pagamento) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	pagas := slices.DeleteFunc(slices.Clone(a.dados.FaturasPagas),
+		func(x fatura.Pagamento) bool { return x.Competencia == p.Competencia })
+	novo := a.dados
+	novo.FaturasPagas = append(pagas, p)
+	if err := a.gravar(novo); err != nil {
+		return err
+	}
+	a.dados = novo
+	return nil
+}
+
+// DesfazerPagamentoFatura turns a paid statement back into one to pay.
+func (a *Armazem) DesfazerPagamentoFatura(c fatura.Competencia) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	i := slices.IndexFunc(a.dados.FaturasPagas, func(x fatura.Pagamento) bool { return x.Competencia == c })
+	if i < 0 {
+		return ErrNaoEncontrado
+	}
+	novo := a.dados
+	novo.FaturasPagas = slices.Delete(slices.Clone(a.dados.FaturasPagas), i, i+1)
+	if err := a.gravar(novo); err != nil {
+		return err
+	}
+	a.dados = novo
+	return nil
 }
 
 // gravar writes atomically: a temporary file in the same directory, renamed

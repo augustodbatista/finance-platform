@@ -11,6 +11,7 @@ import (
 
 	"github.com/augustodbatista/finance-platform/api/internal/armazem"
 	"github.com/augustodbatista/finance-platform/api/internal/dominio"
+	"github.com/augustodbatista/finance-platform/api/internal/fatura"
 	"github.com/augustodbatista/finance-platform/api/internal/parser"
 )
 
@@ -397,5 +398,141 @@ func TestAlterar_FalhaDeGravacaoNaoAlteraMemoria(t *testing.T) {
 	}
 	if a.Listar()[0].Lancamento.Centavos != 18000 {
 		t.Error("memory changed after a failed write")
+	}
+}
+
+func pagamentoFatura(t *testing.T, mes time.Month, centavos int64) fatura.Pagamento {
+	t.Helper()
+	hoje := time.Date(2026, time.December, 31, 0, 0, 0, 0, time.UTC)
+	p, err := fatura.Pagar(fatura.Competencia{Ano: 2026, Mes: mes},
+		time.Date(2026, mes+1, 10, 0, 0, 0, 0, time.UTC), centavos, hoje)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestPagarFatura_PersisteECorrige(t *testing.T) {
+	p := caminho(t)
+	a := abrir(t, p)
+	if n := len(a.FaturasPagas()); n != 0 {
+		t.Fatalf("new store has %d paid statements, want 0", n)
+	}
+
+	if err := a.PagarFatura(pagamentoFatura(t, time.September, 123456)); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.PagarFatura(pagamentoFatura(t, time.August, 5000)); err != nil {
+		t.Fatal(err)
+	}
+	// Paying the same statement again corrects it instead of adding a second payment.
+	if err := a.PagarFatura(pagamentoFatura(t, time.September, 130000)); err != nil {
+		t.Fatal(err)
+	}
+
+	pagas := abrir(t, p).FaturasPagas()
+	if len(pagas) != 2 {
+		t.Fatalf("%d paid statements after reopening, want 2: %+v", len(pagas), pagas)
+	}
+	porMes := map[time.Month]int64{}
+	for _, pg := range pagas {
+		porMes[pg.Competencia.Mes] = pg.Centavos
+	}
+	if porMes[time.September] != 130000 || porMes[time.August] != 5000 {
+		t.Errorf("paid statements = %v; want September corrected to 130000 and August 5000", porMes)
+	}
+}
+
+func TestDesfazerPagamentoFatura(t *testing.T) {
+	p := caminho(t)
+	a := abrir(t, p)
+	setembro := fatura.Competencia{Ano: 2026, Mes: time.September}
+	if err := a.PagarFatura(pagamentoFatura(t, time.September, 123456)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := a.DesfazerPagamentoFatura(setembro); err != nil {
+		t.Fatalf("undo: %v", err)
+	}
+	if n := len(abrir(t, p).FaturasPagas()); n != 0 {
+		t.Errorf("%d paid statements after undo and reopen, want 0", n)
+	}
+	if err := a.DesfazerPagamentoFatura(setembro); !errors.Is(err, armazem.ErrNaoEncontrado) {
+		t.Errorf("undoing an unpaid statement: error = %v, want ErrNaoEncontrado", err)
+	}
+}
+
+func TestFaturasPagasDevolveCopia(t *testing.T) {
+	a := abrir(t, caminho(t))
+	if err := a.PagarFatura(pagamentoFatura(t, time.September, 1000)); err != nil {
+		t.Fatal(err)
+	}
+	a.FaturasPagas()[0].Centavos = 1
+	if a.FaturasPagas()[0].Centavos != 1000 {
+		t.Error("changing the returned slice altered internal state")
+	}
+}
+
+// Until a statement is paid, the file is written exactly as before.
+func TestSemFaturaPagaArquivoNaoMuda(t *testing.T) {
+	p := caminho(t)
+	if _, err := abrir(t, p).Adicionar("10 mercado", lanc(t, "10 mercado")); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Clean(p))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "faturas_pagas") {
+		t.Errorf("file has faturas_pagas with no paid statement:\n%s", b)
+	}
+}
+
+func TestPagarFatura_FalhaDeGravacaoNaoAlteraMemoria(t *testing.T) {
+	p := caminho(t)
+	a := abrir(t, p)
+	if _, err := a.Adicionar("10 mercado", lanc(t, "10 mercado")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(p, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := a.PagarFatura(pagamentoFatura(t, time.September, 1000)); err == nil {
+		t.Fatal("PagarFatura should fail when the rename fails")
+	}
+	if n := len(a.FaturasPagas()); n != 0 {
+		t.Errorf("memory has %d paid statements after a failed write, want 0", n)
+	}
+	if err := a.DesfazerPagamentoFatura(fatura.Competencia{Ano: 2026, Mes: time.September}); !errors.Is(err, armazem.ErrNaoEncontrado) {
+		t.Errorf("undo after failed pay: error = %v, want ErrNaoEncontrado", err)
+	}
+}
+
+// Adding, changing or removing an entry rewrites the whole file: it must carry
+// the paid statements along instead of dropping them.
+func TestOperacoesEmLancamentosPreservamFaturasPagas(t *testing.T) {
+	p := caminho(t)
+	a := abrir(t, p)
+	if err := a.PagarFatura(pagamentoFatura(t, time.September, 123456)); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := a.Adicionar("10 mercado", lanc(t, "10 mercado"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Alterar(r.ID, func(l dominio.Lancamento) (dominio.Lancamento, error) { return l, nil }); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Remover(r.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	if n := len(abrir(t, p).FaturasPagas()); n != 1 {
+		t.Errorf("%d paid statements after add/change/remove and reopen, want 1", n)
 	}
 }
