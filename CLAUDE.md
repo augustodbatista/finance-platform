@@ -424,6 +424,11 @@ Every new gotcha goes here **before** moving on.
 - **The Flutter CI jobs stay dormant until `app/` exists** (`paths-filter` skips
   them). That is deliberate: the first commit in `app/` will probably surface a config
   problem, and fixing it is part of that commit.
+- **The default data file lands inside the repository.** `FINANCE_DADOS` defaults
+  to `dados.json` in the working directory, so `go run ./cmd/app` from `api/`
+  writes real financial data into the repo -- one `git add -A` away from a public
+  GitHub. `dados*.json` is now gitignored; for real use, point `FINANCE_DADOS`
+  outside the repository (the Windows setup uses `%USERPROFILE%\FinancePlatform`).
 - **Bash heredocs in the agent shell sometimes break on quotes** ("unexpected EOF
   while looking for matching `''"), especially Python or JSON with backslashes. Write
   the script or file with the editor tool and run it, instead of inlining it.

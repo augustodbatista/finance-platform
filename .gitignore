@@ -1,3 +1,7 @@
+# Dados financeiros reais: o app grava dados.json na pasta onde roda
+# (FINANCE_DADOS). Nunca podem ir para um repositorio publico.
+dados*.json
+
 # Segredos
 .env
 .env.*
