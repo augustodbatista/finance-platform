@@ -11,6 +11,8 @@
 package resumo
 
 import (
+	"cmp"
+	"slices"
 	"time"
 
 	"github.com/augustodbatista/finance-platform/api/internal/fatura"
@@ -28,6 +30,15 @@ type Resumo struct {
 	// EconomiaCentavos is income minus expenses. It goes negative in a month
 	// that only has a statement to pay, and that is information, not an error.
 	EconomiaCentavos int64
+	// Categorias breaks DespesasCentavos down by category, largest first. It
+	// always adds up to DespesasCentavos: both are filled at the same point.
+	Categorias []TotalCategoria
+}
+
+// TotalCategoria is how much of the month's expenses went to one category.
+type TotalCategoria struct {
+	Categoria parser.Categoria
+	Centavos  int64
 }
 
 // Mensal sums the entries that belong to the given month.
@@ -42,6 +53,14 @@ type Resumo struct {
 // money that may already have left the account.
 func Mensal(mes fatura.Competencia, lancamentos []parser.Lancamento, diaFechamento int) (Resumo, error) {
 	var r Resumo
+	porCategoria := map[parser.Categoria]int64{}
+
+	// The only place an expense is counted: the total and the per-category
+	// breakdown cannot drift apart.
+	despesa := func(c parser.Categoria, centavos int64) {
+		r.DespesasCentavos += centavos
+		porCategoria[c] += centavos
+	}
 
 	for _, l := range lancamentos {
 		if l.Tipo == parser.Receita {
@@ -53,7 +72,7 @@ func Mensal(mes fatura.Competencia, lancamentos []parser.Lancamento, diaFechamen
 
 		if l.Forma != parser.Credito {
 			if noMes(l.Data, mes) {
-				r.DespesasCentavos += l.Centavos
+				despesa(l.Categoria, l.Centavos)
 			}
 			continue
 		}
@@ -64,13 +83,27 @@ func Mensal(mes fatura.Competencia, lancamentos []parser.Lancamento, diaFechamen
 		}
 		for _, p := range parcelas {
 			if p.Competencia == mes {
-				r.DespesasCentavos += p.Centavos
+				despesa(l.Categoria, p.Centavos)
 			}
 		}
 	}
 
 	r.EconomiaCentavos = r.ReceitasCentavos - r.DespesasCentavos
+	r.Categorias = ordenar(porCategoria)
 	return r, nil
+}
+
+// ordenar lists categories largest first, ties by name, so the screen never
+// reshuffles between two loads of the same month (map order is random).
+func ordenar(porCategoria map[parser.Categoria]int64) []TotalCategoria {
+	out := make([]TotalCategoria, 0, len(porCategoria))
+	for c, v := range porCategoria {
+		out = append(out, TotalCategoria{Categoria: c, Centavos: v})
+	}
+	slices.SortFunc(out, func(a, b TotalCategoria) int {
+		return cmp.Or(cmp.Compare(b.Centavos, a.Centavos), cmp.Compare(a.Categoria, b.Categoria))
+	})
+	return out
 }
 
 // noMes reports whether the date falls in the given month.

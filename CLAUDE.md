@@ -230,6 +230,12 @@ have left the account.
 Savings (`Economia`) go negative in a month that only has a statement to pay — that
 is information, not an error.
 
+`Categorias` breaks expenses down by category, largest first, ties by name (map
+order is random, and the screen must not reshuffle between loads). **It always adds
+up to `DespesasCentavos`**: both are filled by the same closure, the only place an
+expense is counted -- tested as an invariant across months with installments and a
+closing-day purchase. Any future rule about what counts as an expense goes there.
+
 **There is no current balance yet.** It needs an opening balance and statement
 payments modeled as entries; neither exists. It arrives with the slice that brings
 accounts and statement payments.
@@ -265,7 +271,8 @@ mock would be an interface with a single implementation.
 ### `api/internal/web` — HTTP and the MVP page
 
 `Novo(Config) http.Handler`. Routes: `GET /` (page), `GET/POST /api/lancamentos`,
-`DELETE /api/lancamentos/{id}`, `GET /api/resumo?mes=YYYY-MM`. The page (`static/`)
+`DELETE /api/lancamentos/{id}`, `GET /api/resumo?mes=YYYY-MM` (totals plus
+`categorias`, always an array, never `null`). The page (`static/`)
 is embedded in the binary. 98.9% coverage.
 
 Attack surfaces and their handling, all tested:

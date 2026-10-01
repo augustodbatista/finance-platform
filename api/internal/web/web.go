@@ -172,12 +172,23 @@ func (s *servidor) resumo(w http.ResponseWriter, r *http.Request) {
 		falhar(w, http.StatusInternalServerError, "Não consegui calcular o resumo.")
 		return
 	}
+	// [] rather than null in an empty month: the front end iterates it.
+	categorias := make([]categoriaJSON, 0, len(res.Categorias))
+	for _, c := range res.Categorias {
+		categorias = append(categorias, categoriaJSON{string(c.Categoria), c.Centavos})
+	}
 	responder(w, http.StatusOK, map[string]any{
-		"mes":      ref.Format("2006-01"),
-		"receitas": res.ReceitasCentavos,
-		"despesas": res.DespesasCentavos,
-		"economia": res.EconomiaCentavos,
+		"mes":        ref.Format("2006-01"),
+		"receitas":   res.ReceitasCentavos,
+		"despesas":   res.DespesasCentavos,
+		"economia":   res.EconomiaCentavos,
+		"categorias": categorias,
 	})
+}
+
+type categoriaJSON struct {
+	Categoria string `json:"categoria"`
+	Centavos  int64  `json:"centavos"`
 }
 
 // mensagem turns a domain error into something the user understands and can fix.

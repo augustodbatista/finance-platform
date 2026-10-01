@@ -122,6 +122,32 @@ button:disabled { opacity: 0.6; }
 #receitas { color: var(--receita); }
 #despesas { color: var(--despesa); }
 
+h3 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--suave);
+  margin: 1.25rem 0 0.5rem;
+}
+
+#categorias { list-style: none; margin: 0; padding: 0; }
+#categorias li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.25rem 0.75rem;
+  padding: 0.4rem 0;
+}
+.cat-valor { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cat-trilho {
+  grid-column: 1 / -1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--borda);
+  overflow: hidden;
+}
+.cat-barra { display: block; height: 100%; background: var(--despesa); }
+
 #lista { list-style: none; margin: 0; padding: 0; }
 #lista li {
   display: grid;

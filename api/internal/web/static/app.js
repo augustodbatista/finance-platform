@@ -44,6 +44,37 @@ async function carregarResumo() {
   $("receitas").textContent = reais(r.receitas);
   $("despesas").textContent = reais(r.despesas);
   $("economia").textContent = reais(r.economia);
+  mostrarCategorias(r.categorias, r.despesas);
+}
+
+// Each category with its amount, its share of the month and a bar. The bar's
+// width is set through element.style, which the CSP allows; a style="" attribute
+// in the markup would be blocked by default-src 'self'.
+function mostrarCategorias(categorias, total) {
+  const itens = categorias.map((c) => {
+    const pct = total > 0 ? Math.round((c.centavos / total) * 100) : 0;
+
+    const li = document.createElement("li");
+    const nome = document.createElement("span");
+    nome.className = "cat-nome";
+    nome.textContent = CATEGORIAS[c.categoria] || c.categoria;
+    const valor = document.createElement("span");
+    valor.className = "cat-valor";
+    valor.textContent = `${reais(c.centavos)} · ${pct}%`;
+
+    const trilho = document.createElement("span");
+    trilho.className = "cat-trilho";
+    trilho.setAttribute("aria-hidden", "true"); // the % in the text already says it
+    const barra = document.createElement("span");
+    barra.className = "cat-barra";
+    barra.style.width = `${pct}%`;
+    trilho.append(barra);
+
+    li.append(nome, valor, trilho);
+    return li;
+  });
+  $("categorias").replaceChildren(...itens);
+  $("sem-categorias").hidden = categorias.length > 0;
 }
 
 function item(l) {

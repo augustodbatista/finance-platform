@@ -275,3 +275,41 @@ func TestResumo_ConfigInvalidaViraErro500(t *testing.T) {
 		t.Errorf("status %d, want 500", w.Code)
 	}
 }
+
+func TestResumo_Categorias(t *testing.T) {
+	h := novo(t, "")
+	lancar(t, h, "120 mercado debito")
+	lancar(t, h, "42,50 almoço pix")
+	lancar(t, h, "salario 3500") // income: never in the expense breakdown
+
+	var r struct {
+		Despesas   int64 `json:"despesas"`
+		Categorias []struct {
+			Categoria string `json:"categoria"`
+			Centavos  int64  `json:"centavos"`
+		} `json:"categorias"`
+	}
+	w := req(t, h, http.MethodGet, "/api/resumo?mes=2026-09", "")
+	if err := json.Unmarshal(w.Body.Bytes(), &r); err != nil {
+		t.Fatalf("%v (%s)", err, w.Body)
+	}
+
+	if len(r.Categorias) != 2 || r.Categorias[0].Categoria != "mercado" || r.Categorias[0].Centavos != 12000 ||
+		r.Categorias[1].Categoria != "alimentacao" || r.Categorias[1].Centavos != 4250 {
+		t.Errorf("categorias = %+v, want mercado 12000 then alimentacao 4250", r.Categorias)
+	}
+	var soma int64
+	for _, c := range r.Categorias {
+		soma += c.Centavos
+	}
+	if soma != r.Despesas {
+		t.Errorf("categories add up to %d, despesas is %d", soma, r.Despesas)
+	}
+}
+
+func TestResumo_MesSemDespesasDevolveListaVazia(t *testing.T) {
+	w := req(t, novo(t, ""), http.MethodGet, "/api/resumo?mes=2026-09", "")
+	if !strings.Contains(w.Body.String(), `"categorias":[]`) {
+		t.Errorf("body = %s, want \"categorias\":[] (null would break the front end loop)", w.Body)
+	}
+}

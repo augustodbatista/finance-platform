@@ -2,6 +2,7 @@ package resumo_test
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -127,5 +128,71 @@ func TestMensal_PropagaErroDeFatura(t *testing.T) {
 
 	if _, err := resumo.Mensal(comp(2026, time.July), ls, 0); !errors.Is(err, fatura.ErrDiaFechamentoInvalido) {
 		t.Errorf("error = %v, want ErrDiaFechamentoInvalido", err)
+	}
+}
+
+// The per-category breakdown must add up to the expenses total, in every month,
+// including installments and a purchase on the closing day. A breakdown that
+// does not match the total next to it is worse than no breakdown.
+func TestMensal_CategoriasSomamODespesas(t *testing.T) {
+	for _, mes := range []fatura.Competencia{
+		comp(2026, time.June), comp(2026, time.July), comp(2026, time.August),
+		comp(2026, time.September), comp(2026, time.November),
+	} {
+		r, err := resumo.Mensal(mes, lancamentos(), fechamento)
+		if err != nil {
+			t.Fatalf("%v: unexpected error: %v", mes, err)
+		}
+		var soma int64
+		for _, c := range r.Categorias {
+			soma += c.Centavos
+		}
+		if soma != r.DespesasCentavos {
+			t.Errorf("%v: categories add up to %d, expenses total is %d", mes, soma, r.DespesasCentavos)
+		}
+	}
+}
+
+func TestMensal_CategoriasDoMes(t *testing.T) {
+	// July: groceries 120 (debit) + first installment of the home purchase (100).
+	// The leisure purchase on the 28th belongs to August's statement.
+	r, err := resumo.Mensal(comp(2026, time.July), lancamentos(), fechamento)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := []resumo.TotalCategoria{
+		{Categoria: parser.Mercado, Centavos: 12000},
+		{Categoria: parser.Casa, Centavos: 10000},
+	}
+	if !slices.Equal(r.Categorias, want) {
+		t.Errorf("Categorias = %+v, want %+v (largest first)", r.Categorias, want)
+	}
+}
+
+func TestMensal_CategoriasEmpateOrdemEstavel(t *testing.T) {
+	// Same amount in two categories: order by name, so the screen never
+	// reshuffles between two loads of the same month.
+	ls := []parser.Lancamento{
+		{Centavos: 5000, Categoria: parser.Transporte, Tipo: parser.Despesa,
+			Data: dia(2026, time.July, 3), Forma: parser.Pix, Parcelas: 1},
+		{Centavos: 5000, Categoria: parser.Alimentacao, Tipo: parser.Despesa,
+			Data: dia(2026, time.July, 4), Forma: parser.Pix, Parcelas: 1},
+	}
+
+	r, err := resumo.Mensal(comp(2026, time.July), ls, fechamento)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if r.Categorias[0].Categoria != parser.Alimentacao || r.Categorias[1].Categoria != parser.Transporte {
+		t.Errorf("tie order = %v, %v; want alimentacao before transporte",
+			r.Categorias[0].Categoria, r.Categorias[1].Categoria)
+	}
+}
+
+func TestMensal_MesSemDespesasNaoTemCategorias(t *testing.T) {
+	r, _ := resumo.Mensal(comp(2026, time.November), lancamentos(), fechamento)
+	if len(r.Categorias) != 0 {
+		t.Errorf("Categorias = %+v, want empty", r.Categorias)
 	}
 }
