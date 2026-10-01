@@ -41,6 +41,14 @@ type Lancamento struct {
 	// into installments belongs to whoever knows the card's closing day, in
 	// package fatura.
 	Parcelas int
+
+	// Vencimento and Pagamento turn an entry into a bill; see conta.go.
+	//
+	// omitzero keeps them out of dados.json while unused: entries that are not
+	// bills are written exactly as before, and files written before bills
+	// existed load with both fields zero, which means "regular entry".
+	Vencimento time.Time `json:",omitzero"`
+	Pagamento  Pagamento `json:",omitzero"`
 }
 
 // Categoria is a closed set, not free text. Unrecognized input falls into

@@ -33,6 +33,10 @@ type Resumo struct {
 	// Categorias breaks DespesasCentavos down by category, largest first. It
 	// always adds up to DespesasCentavos: both are filled at the same point.
 	Categorias []TotalCategoria
+	// APagarCentavos is what is due this month and not paid yet: bills by their
+	// expected amount. It is not part of DespesasCentavos, which only counts
+	// money that already left the pocket.
+	APagarCentavos int64
 }
 
 // TotalCategoria is how much of the month's expenses went to one category.
@@ -45,6 +49,9 @@ type TotalCategoria struct {
 //
 // Income counts in the month of its date and ignores statements and
 // installments: a credit card is a way of spending, not of receiving.
+//
+// A bill counts as an expense only once paid, in the month of the payment and
+// for the amount paid; until then it is "a pagar" in the month it is due.
 //
 // A credit card expense counts on each installment's statement; any other
 // payment method counts in the month of the purchase date. FormaNaoInformada
@@ -66,6 +73,16 @@ func Mensal(mes fatura.Competencia, lancamentos []dominio.Lancamento, diaFechame
 		if l.Tipo == dominio.Receita {
 			if noMes(l.Data, mes) {
 				r.ReceitasCentavos += l.Centavos
+			}
+			continue
+		}
+
+		if l.EConta() {
+			switch {
+			case l.Pago() && noMes(l.Pagamento.Data, mes):
+				despesa(l.Categoria, l.Pagamento.Centavos)
+			case !l.Pago() && noMes(l.Vencimento, mes):
+				r.APagarCentavos += l.Centavos
 			}
 			continue
 		}
@@ -104,6 +121,29 @@ func ordenar(porCategoria map[dominio.Categoria]int64) []TotalCategoria {
 		return cmp.Or(cmp.Compare(b.Centavos, a.Centavos), cmp.Compare(a.Categoria, b.Categoria))
 	})
 	return out
+}
+
+// Vencidas counts the bills that are past due and still unpaid, whatever month
+// is on screen: an overdue bill must not vanish just because the summary moved
+// on to the next month. A bill due today is not overdue yet.
+//
+// Days are compared on the calendar (year, month, day), not as instants: mixing
+// time zones would make a bill due today look overdue.
+func Vencidas(lancamentos []dominio.Lancamento, hoje time.Time) (quantidade int, centavos int64) {
+	for _, l := range lancamentos {
+		if l.EConta() && !l.Pago() && antesDe(l.Vencimento, hoje) {
+			quantidade++
+			centavos += l.Centavos
+		}
+	}
+	return quantidade, centavos
+}
+
+// antesDe reports whether day a comes before day b on the calendar.
+func antesDe(a, b time.Time) bool {
+	return cmp.Or(cmp.Compare(a.Year(), b.Year()),
+		cmp.Compare(a.Month(), b.Month()),
+		cmp.Compare(a.Day(), b.Day())) < 0
 }
 
 // noMes reports whether the date falls in the given month.

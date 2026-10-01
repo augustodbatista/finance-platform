@@ -13,6 +13,8 @@ import (
 
 const fechamento = 28
 
+var brt = time.FixedZone("BRT", -3*60*60)
+
 func dia(ano int, mes time.Month, d int) time.Time {
 	return time.Date(ano, mes, d, 0, 0, 0, 0, time.UTC)
 }
@@ -194,5 +196,86 @@ func TestMensal_MesSemDespesasNaoTemCategorias(t *testing.T) {
 	r, _ := resumo.Mensal(comp(2026, time.November), lancamentos(), fechamento)
 	if len(r.Categorias) != 0 {
 		t.Errorf("Categorias = %+v, want empty", r.Categorias)
+	}
+}
+
+func conta(t *testing.T, centavos int64, cat dominio.Categoria, vencimento time.Time) dominio.Lancamento {
+	t.Helper()
+	l := dominio.Lancamento{Centavos: centavos, Categoria: cat, Tipo: dominio.Despesa,
+		Data: dia(2026, time.September, 1), Forma: dominio.Pix, Parcelas: 1}
+	c, err := l.ComoConta(vencimento)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func paga(t *testing.T, l dominio.Lancamento, data time.Time, centavos int64) dominio.Lancamento {
+	t.Helper()
+	p, err := l.Pagar(data, centavos, dia(2026, time.December, 31))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// Expenses are what left the pocket: a bill counts when paid, in the month of
+// the payment and for the amount paid. Until then it is "a pagar" in the month
+// it is due.
+func TestMensal_Contas(t *testing.T) {
+	luz := conta(t, 18000, dominio.Casa, dia(2026, time.September, 10))
+	// Due in September, paid late in October with a fine.
+	luzPaga := paga(t, luz, dia(2026, time.October, 2), 18540)
+	internet := conta(t, 10000, dominio.Casa, dia(2026, time.September, 20)) // still unpaid
+	ls := []dominio.Lancamento{luzPaga, internet}
+
+	setembro, _ := resumo.Mensal(comp(2026, time.September), ls, fechamento)
+	if setembro.DespesasCentavos != 0 || setembro.APagarCentavos != 10000 {
+		t.Errorf("September: expenses %d, a pagar %d; want 0 and 10000 (only the unpaid bill is pending)",
+			setembro.DespesasCentavos, setembro.APagarCentavos)
+	}
+
+	outubro, _ := resumo.Mensal(comp(2026, time.October), ls, fechamento)
+	if outubro.DespesasCentavos != 18540 || outubro.APagarCentavos != 0 {
+		t.Errorf("October: expenses %d, a pagar %d; want 18540 (paid amount, payment month) and 0",
+			outubro.DespesasCentavos, outubro.APagarCentavos)
+	}
+	if len(outubro.Categorias) != 1 || outubro.Categorias[0].Centavos != 18540 {
+		t.Errorf("October categories = %+v, want casa 18540", outubro.Categorias)
+	}
+	if outubro.EconomiaCentavos != -18540 {
+		t.Errorf("October savings = %d, want -18540: pending bills do not count as spent", outubro.EconomiaCentavos)
+	}
+}
+
+// A regular entry -- every entry logged before bills existed -- keeps exactly
+// its old behavior: spent on its date, for its amount, never "a pagar".
+func TestMensal_LancamentoComumNaoMuda(t *testing.T) {
+	for _, mes := range []fatura.Competencia{comp(2026, time.June), comp(2026, time.July), comp(2026, time.August)} {
+		r, err := resumo.Mensal(mes, lancamentos(), fechamento)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.APagarCentavos != 0 {
+			t.Errorf("%v: a pagar = %d, want 0 with no bills", mes, r.APagarCentavos)
+		}
+	}
+}
+
+func TestVencidas(t *testing.T) {
+	hoje := time.Date(2026, time.October, 15, 14, 0, 0, 0, brt)
+	ls := []dominio.Lancamento{
+		conta(t, 18000, dominio.Casa, dia(2026, time.September, 10)),                                      // overdue
+		conta(t, 5000, dominio.Saude, dia(2026, time.October, 14)),                                        // overdue (yesterday)
+		conta(t, 7000, dominio.Lazer, dia(2026, time.October, 15)),                                        // due today: not yet
+		conta(t, 9000, dominio.Educacao, dia(2026, time.October, 30)),                                     // future
+		paga(t, conta(t, 3000, dominio.Casa, dia(2026, time.August, 1)), dia(2026, time.August, 1), 3000), // paid
+		{Centavos: 4000, Categoria: dominio.Mercado, Tipo: dominio.Despesa, Data: dia(2026, time.September, 1),
+			Forma: dominio.Pix, Parcelas: 1}, // regular entry, not a bill
+	}
+
+	qtd, centavos := resumo.Vencidas(ls, hoje)
+	if qtd != 2 || centavos != 23000 {
+		t.Errorf("Vencidas = %d bills, %d cents; want 2 and 23000", qtd, centavos)
 	}
 }

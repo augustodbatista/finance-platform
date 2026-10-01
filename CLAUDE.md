@@ -124,6 +124,25 @@ income/expense). Every other package imports these from here. They lived in
 `parser` until Oct/2026, when the "third consumer" trigger had fired and the
 entry was about to gain payment fields. 100% coverage.
 
+**Bills (`conta.go`).** An entry is in one of three states, all tested:
+
+| State | Fields | Counts as |
+|---|---|---|
+| Regular (every entry before Oct/2026) | `Vencimento` zero | spent on `Data`, for `Centavos` |
+| Bill to pay | `Vencimento` set, `Pagamento` zero | "a pagar" in the due month |
+| Paid bill | both set | spent on `Pagamento.Data`, for `Pagamento.Centavos` |
+
+`ComoConta` refuses credit purchases (paid through the statement), income, and a
+missing due date. `Pagar` refuses a non-bill, an amount <= 0 and a date after
+today ("paid" means it happened); paying again corrects the payment;
+`DesfazerPagamento` undoes it. `Centavos` stays as the expected amount so fines
+and discounts remain visible next to the paid one. Product decisions by Augusto
+(2026-10-01): paid amount wins; the summary separates paid from pending.
+
+`Vencimento` and `Pagamento` use `json:",omitzero"` (Go 1.24+): regular entries
+are written byte for byte as before, and old files load with both zero, which
+means "regular entry".
+
 ### `api/internal/parser` — pure domain, no I/O
 
 `Parse(entrada string, agora time.Time) (dominio.Lancamento, error)` turns the
@@ -230,6 +249,8 @@ two numbers that look the same:
 | Income | month of `Data` — ignores statements and installments (a card is for spending, not receiving) |
 | Non-credit expense (debit, pix, cash, **not stated**) | month of `Data` |
 | Credit card expense | statement of **each installment** |
+| Bill, unpaid | not an expense: `APagarCentavos` in the **due** month |
+| Bill, paid | expense in the **payment** month, for the **paid** amount |
 
 `FormaNaoInformada` counts in the month of the date: the parser does not invent a
 method, and treating the unknown as credit would postpone money that may already
@@ -244,6 +265,11 @@ up to `DespesasCentavos`**: both are filled by the same closure, the only place 
 expense is counted -- tested as an invariant across months with installments and a
 closing-day purchase. Any future rule about what counts as an expense goes there.
 
+`Vencidas(lancamentos, hoje)` counts unpaid bills past due, whatever month is on
+screen, so an overdue bill never vanishes when the summary moves on. Days are
+compared on the calendar (year, month, day), never as instants: mixing time zones
+would make a bill due today look overdue.
+
 **There is no current balance yet.** It needs an opening balance and statement
 payments modeled as entries; neither exists. It arrives with the slice that brings
 accounts and statement payments.
@@ -253,7 +279,8 @@ accounts and statement payments.
 
 Stores entries in a local JSON file ([ADR-0001](docs/decisions/adr-0001-mvp-binario-go.md)).
 `Abrir` (open), `Adicionar` (add), `Listar` (list, newest first, returns a copy),
-`Remover` (remove). Safe for concurrent use. 90.4% coverage.
+`Remover` (remove), `Alterar` (replace an entry by what a domain function returns;
+if it errors, nothing changes and the error is passed through). Safe for concurrent use. 90.4% coverage.
 
 Guarantees, all tested:
 

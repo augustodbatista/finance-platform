@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -281,5 +282,120 @@ func TestFormatoV1ContinuaLegivel(t *testing.T) {
 	}
 	if r.ID != 4 {
 		t.Errorf("new ID = %d, want 4 (proximo_id from the file)", r.ID)
+	}
+}
+
+// Entries that are not bills must be written exactly as before bills existed:
+// no Vencimento or Pagamento keys. That keeps files readable by older builds
+// and keeps the format test meaningful.
+func TestLancamentoComumNaoGravaCamposDeConta(t *testing.T) {
+	p := caminho(t)
+	if _, err := abrir(t, p).Adicionar("10 mercado", lanc(t, "10 mercado")); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Clean(p))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, chave := range []string{`"Vencimento"`, `"Pagamento"`} {
+		if strings.Contains(string(b), chave) {
+			t.Errorf("file contains %s for a regular entry:\n%s", chave, b)
+		}
+	}
+}
+
+func contaPaga(t *testing.T) dominio.Lancamento {
+	t.Helper()
+	brt := time.FixedZone("BRT", -3*60*60)
+	conta, err := lanc(t, "luz 180 pix").ComoConta(time.Date(2026, time.October, 10, 0, 0, 0, 0, brt))
+	if err != nil {
+		t.Fatal(err)
+	}
+	paga, err := conta.Pagar(time.Date(2026, time.October, 12, 0, 0, 0, 0, brt), 18540,
+		time.Date(2026, time.October, 12, 9, 0, 0, 0, brt))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return paga
+}
+
+func TestContaPagaPersisteEntreAberturas(t *testing.T) {
+	p := caminho(t)
+	l := contaPaga(t)
+	if _, err := abrir(t, p).Adicionar("luz 180 pix", l); err != nil {
+		t.Fatal(err)
+	}
+
+	got := abrir(t, p).Listar()[0].Lancamento
+	if !got.Vencimento.Equal(l.Vencimento) || !got.Pagamento.Data.Equal(l.Pagamento.Data) ||
+		got.Pagamento.Centavos != 18540 || !got.EConta() || !got.Pago() {
+		t.Errorf("reopened bill = %+v, want %+v", got, l)
+	}
+}
+
+func TestAlterar(t *testing.T) {
+	p := caminho(t)
+	a := abrir(t, p)
+	r, _ := a.Adicionar("luz 180 pix", lanc(t, "luz 180 pix"))
+	venc := time.Date(2026, time.October, 10, 0, 0, 0, 0, time.UTC)
+
+	alterado, err := a.Alterar(r.ID, func(l dominio.Lancamento) (dominio.Lancamento, error) {
+		return l.ComoConta(venc)
+	})
+	if err != nil {
+		t.Fatalf("Alterar: %v", err)
+	}
+	if !alterado.Lancamento.Vencimento.Equal(venc) || alterado.ID != r.ID || alterado.Texto != r.Texto {
+		t.Errorf("returned record = %+v", alterado)
+	}
+	if got := abrir(t, p).Listar()[0].Lancamento; !got.Vencimento.Equal(venc) {
+		t.Errorf("after reopening, Vencimento = %v, want %v", got.Vencimento, venc)
+	}
+}
+
+func TestAlterar_Recusas(t *testing.T) {
+	p := caminho(t)
+	a := abrir(t, p)
+	r, _ := a.Adicionar("luz 180 pix", lanc(t, "luz 180 pix"))
+	regra := errors.New("rule refused")
+
+	if _, err := a.Alterar(999, func(l dominio.Lancamento) (dominio.Lancamento, error) { return l, nil }); !errors.Is(err, armazem.ErrNaoEncontrado) {
+		t.Errorf("unknown ID: error = %v, want ErrNaoEncontrado", err)
+	}
+
+	// The domain refuses: nothing changes, in memory or on disk, and the
+	// domain's error reaches the caller untouched.
+	_, err := a.Alterar(r.ID, func(l dominio.Lancamento) (dominio.Lancamento, error) {
+		l.Centavos = 1
+		return l, regra
+	})
+	if !errors.Is(err, regra) {
+		t.Errorf("error = %v, want the domain's error", err)
+	}
+	if a.Listar()[0].Lancamento.Centavos != 18000 || abrir(t, p).Listar()[0].Lancamento.Centavos != 18000 {
+		t.Error("a refused change altered the entry")
+	}
+}
+
+func TestAlterar_FalhaDeGravacaoNaoAlteraMemoria(t *testing.T) {
+	p := caminho(t)
+	a := abrir(t, p)
+	r, _ := a.Adicionar("luz 180 pix", lanc(t, "luz 180 pix"))
+	if err := os.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(p, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := a.Alterar(r.ID, func(l dominio.Lancamento) (dominio.Lancamento, error) {
+		l.Centavos = 1
+		return l, nil
+	})
+	if err == nil {
+		t.Fatal("Alterar should fail when the rename fails")
+	}
+	if a.Listar()[0].Lancamento.Centavos != 18000 {
+		t.Error("memory changed after a failed write")
 	}
 }

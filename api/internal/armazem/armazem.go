@@ -114,6 +114,35 @@ func (a *Armazem) Remover(id int64) error {
 	return nil
 }
 
+// Alterar replaces the entry with the given ID by what f returns from it, and
+// returns the updated record. f is where the domain rule runs (paying a bill,
+// for instance): if f returns an error, nothing changes and that error is
+// returned as is, so callers can still match it with errors.Is.
+//
+// The ID and the original text are kept; only the entry changes.
+func (a *Armazem) Alterar(id int64, f func(dominio.Lancamento) (dominio.Lancamento, error)) (Registro, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	i := slices.IndexFunc(a.dados.Registros, func(r Registro) bool { return r.ID == id })
+	if i < 0 {
+		return Registro{}, ErrNaoEncontrado
+	}
+	l, err := f(a.dados.Registros[i].Lancamento)
+	if err != nil {
+		return Registro{}, err
+	}
+
+	registros := slices.Clone(a.dados.Registros)
+	registros[i].Lancamento = l
+	novo := conteudo{ProximoID: a.dados.ProximoID, Registros: registros}
+	if err := a.gravar(novo); err != nil {
+		return Registro{}, err
+	}
+	a.dados = novo
+	return registros[i], nil
+}
+
 // gravar writes atomically: a temporary file in the same directory, renamed
 // over the target. A crash mid-write leaves the old file whole, never a
 // half-written one. In-memory state only changes after the disk has confirmed
