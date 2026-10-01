@@ -17,6 +17,8 @@ func TestTipoDe(t *testing.T) {
 		dominio.Assinaturas:   dominio.Despesa,
 		// Outros exists in both lists; with no sign of income it is an expense.
 		dominio.Outros: dominio.Despesa,
+		// A statement adjustment is money going out (or a refund of it).
+		dominio.AjusteFatura: dominio.Despesa,
 		// A category that does not exist is not income either.
 		dominio.Categoria("inexistente"): dominio.Despesa,
 	}

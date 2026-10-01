@@ -14,7 +14,7 @@ const CATEGORIAS = {
   alimentacao: "Alimentação", mercado: "Mercado", transporte: "Transporte",
   casa: "Casa", saude: "Saúde", lazer: "Lazer", educacao: "Educação",
   assinaturas: "Assinaturas", salario: "Salário", freelancer: "Freelancer",
-  investimentos: "Investimentos", outros: "Outros",
+  investimentos: "Investimentos", outros: "Outros", ajuste_fatura: "Ajuste da fatura",
 };
 const FORMAS = { dinheiro: "dinheiro", pix: "pix", debito: "débito", credito: "crédito" };
 
@@ -81,7 +81,9 @@ function mostrarCategorias(categorias, total) {
     trilho.setAttribute("aria-hidden", "true"); // the % in the text already says it
     const barra = document.createElement("span");
     barra.className = "cat-barra";
-    barra.style.width = `${pct}%`;
+    // Clamped: a negative "ajuste da fatura" (a discount) has a negative share
+    // and pushes the others past 100%. The text keeps the real number.
+    barra.style.width = `${Math.min(100, Math.max(0, pct))}%`;
     trilho.append(barra);
 
     li.append(nome, valor, trilho);
@@ -119,7 +121,49 @@ function item(l) {
   meta.textContent = partes.join(" · ");
 
   li.append(texto, valor, apagar, meta);
-  if (l.situacao) li.append(situacaoConta(l), acoesConta(l));
+  if (l.situacao) {
+    li.append(situacaoConta(l), acoesPagamento({
+      url: `/api/lancamentos/${l.id}/pagamento`,
+      pago: l.situacao === "paga",
+      previsto: l.centavos,
+      desfazer: `Marcar "${l.texto}" como não paga?`,
+    }));
+  }
+  return li;
+}
+
+const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const mesCurto = (comp) => `${MESES[Number(comp.slice(5, 7)) - 1]}/${comp.slice(0, 4)}`;
+
+// One credit card statement: what its installments add up to, whether it is
+// paid, and the same pay/undo actions as a bill.
+function itemFatura(f) {
+  const li = document.createElement("li");
+
+  const texto = document.createElement("span");
+  texto.className = "texto";
+  texto.textContent = `Fatura de ${mesCurto(f.competencia)}`;
+
+  const valor = document.createElement("span");
+  valor.className = "valor";
+  valor.textContent = reais(f.pagamento ? f.pagamento.centavos : f.centavos);
+
+  const situacao = document.createElement("span");
+  situacao.className = `situacao ${f.pagamento ? "paga" : "a_pagar"}`;
+  if (f.pagamento) {
+    let t = `Paga em ${dataCurta(f.pagamento.data)}`;
+    if (f.pagamento.centavos !== f.centavos) t += ` · compras ${reais(f.centavos)}`;
+    situacao.textContent = t;
+  } else {
+    situacao.textContent = "A pagar";
+  }
+
+  li.append(texto, valor, situacao, acoesPagamento({
+    url: `/api/faturas/${f.competencia}/pagamento`,
+    pago: Boolean(f.pagamento),
+    previsto: f.centavos,
+    desfazer: `Marcar a fatura de ${mesCurto(f.competencia)} como não paga?`,
+  }));
   return li;
 }
 
@@ -142,20 +186,21 @@ function situacaoConta(l) {
 }
 
 // "Pagar" opens a small form (date + amount, pre-filled with today and the
-// expected amount); a paid bill offers "Desfazer pagamento" instead.
-function acoesConta(l) {
+// expected amount); something already paid offers "Desfazer pagamento" instead.
+// Shared by bills and statements: both pay with {data, valor} at url.
+function acoesPagamento({ url, pago, previsto, desfazer: pergunta }) {
   const box = document.createElement("div");
   box.className = "acoes";
 
-  if (l.situacao === "paga") {
+  if (pago) {
     const desfazer = document.createElement("button");
     desfazer.type = "button";
     desfazer.className = "secundario";
     desfazer.textContent = "Desfazer pagamento";
     desfazer.addEventListener("click", async () => {
-      if (!confirm(`Marcar "${l.texto}" como não paga?`)) return;
+      if (!confirm(pergunta)) return;
       try {
-        await api("DELETE", `/api/lancamentos/${l.id}/pagamento`);
+        await api("DELETE", url);
         await atualizar();
       } catch (e) {
         $("erro").textContent = e.message;
@@ -185,7 +230,7 @@ function acoesConta(l) {
   quanto.type = "text";
   quanto.inputMode = "decimal";
   quanto.required = true;
-  quanto.value = valorDigitavel(l.centavos);
+  quanto.value = valorDigitavel(previsto);
   quanto.setAttribute("aria-label", "Valor pago");
 
   const confirmar = document.createElement("button");
@@ -217,7 +262,7 @@ function acoesConta(l) {
     erro.textContent = "";
     confirmar.disabled = true;
     try {
-      await api("POST", `/api/lancamentos/${l.id}/pagamento`, { data: data.value, valor: quanto.value });
+      await api("POST", url, { data: data.value, valor: quanto.value });
       await atualizar();
     } catch (e) {
       erro.textContent = e.message;
@@ -238,9 +283,16 @@ async function carregarLista() {
   $("vazio").hidden = lista.length > 0;
 }
 
+// The section stays hidden for someone who never used a credit card.
+async function carregarFaturas() {
+  const faturas = await api("GET", "/api/faturas");
+  $("faturas").replaceChildren(...faturas.map(itemFatura));
+  $("sec-faturas").hidden = faturas.length === 0;
+}
+
 async function atualizar() {
   try {
-    await Promise.all([carregarResumo(), carregarLista()]);
+    await Promise.all([carregarResumo(), carregarFaturas(), carregarLista()]);
   } catch (e) {
     $("erro").textContent = e.message;
   }

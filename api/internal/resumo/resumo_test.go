@@ -44,6 +44,27 @@ func lancamentos() []dominio.Lancamento {
 	}
 }
 
+// pagasNoProprioMes pays each statement of lancamentos() on the last day of its
+// own month, for its exact total: July 10000 (installment 1 of the home
+// purchase), August 30000 (installment 2 + the purchase on the closing day),
+// September 10000 (installment 3). Under it, the statement month and the payment
+// month coincide, so tests about installments and categories read as before.
+func pagasNoProprioMes(t *testing.T) []fatura.Pagamento {
+	t.Helper()
+	pagar := func(mes time.Month, ultimoDia int, centavos int64) fatura.Pagamento {
+		p, err := fatura.Pagar(comp(2026, mes), dia(2026, mes, ultimoDia), centavos, dia(2026, time.December, 31))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	return []fatura.Pagamento{
+		pagar(time.July, 31, 10000),
+		pagar(time.August, 31, 30000),
+		pagar(time.September, 30, 10000),
+	}
+}
+
 func TestMensal(t *testing.T) {
 	casos := []struct {
 		nome          string
@@ -68,7 +89,7 @@ func TestMensal(t *testing.T) {
 
 	for _, c := range casos {
 		t.Run(c.nome, func(t *testing.T) {
-			got, err := resumo.Mensal(c.mes, lancamentos(), fechamento)
+			got, err := resumo.Mensal(c.mes, lancamentos(), pagasNoProprioMes(t), fechamento)
 			if err != nil {
 				t.Fatalf("Mensal returned unexpected error: %v", err)
 			}
@@ -85,27 +106,45 @@ func TestMensal(t *testing.T) {
 	}
 }
 
-// A debit expense counts on the day; a credit one counts on its statement.
-// They are two different numbers, and mixing them up is the bug this package
-// exists to prevent.
-func TestMensal_CreditoContaNaFaturaEDebitoNoDia(t *testing.T) {
-	compra := dia(2026, time.July, 29) // after closing day 28
+// A debit expense is spent on the day. A credit purchase is pending ("a
+// pagar") on its statement until the statement is paid, and then it is spent in
+// the month of the payment. Mixing these up is the bug this package exists to
+// prevent.
+func TestMensal_CreditoAPagarAtePagarAFatura(t *testing.T) {
+	compra := dia(2026, time.July, 29) // after closing day 28: August's statement
 
-	debito := []dominio.Lancamento{{Centavos: 5000, Tipo: dominio.Despesa,
+	debito := []dominio.Lancamento{{Centavos: 5000, Categoria: dominio.Lazer, Tipo: dominio.Despesa,
 		Data: compra, Forma: dominio.Debito, Parcelas: 1}}
-	credito := []dominio.Lancamento{{Centavos: 5000, Tipo: dominio.Despesa,
+	credito := []dominio.Lancamento{{Centavos: 5000, Categoria: dominio.Lazer, Tipo: dominio.Despesa,
 		Data: compra, Forma: dominio.Credito, Parcelas: 1}}
+	julho, agosto, setembro := comp(2026, time.July), comp(2026, time.August), comp(2026, time.September)
 
-	julho, agosto := comp(2026, time.July), comp(2026, time.August)
-
-	if r, _ := resumo.Mensal(julho, debito, fechamento); r.DespesasCentavos != 5000 {
+	if r, _ := resumo.Mensal(julho, debito, nil, fechamento); r.DespesasCentavos != 5000 {
 		t.Errorf("debit in July = %d, want 5000", r.DespesasCentavos)
 	}
-	if r, _ := resumo.Mensal(julho, credito, fechamento); r.DespesasCentavos != 0 {
-		t.Errorf("credit in July = %d, want 0: its statement is August's", r.DespesasCentavos)
+
+	// Statement not paid: nothing spent, pending in the statement month.
+	if r, _ := resumo.Mensal(julho, credito, nil, fechamento); r.DespesasCentavos != 0 || r.APagarCentavos != 0 {
+		t.Errorf("credit in July = spent %d, pending %d; want 0 and 0 (its statement is August's)",
+			r.DespesasCentavos, r.APagarCentavos)
 	}
-	if r, _ := resumo.Mensal(agosto, credito, fechamento); r.DespesasCentavos != 5000 {
-		t.Errorf("credit in August = %d, want 5000", r.DespesasCentavos)
+	if r, _ := resumo.Mensal(agosto, credito, nil, fechamento); r.DespesasCentavos != 0 || r.APagarCentavos != 5000 {
+		t.Errorf("unpaid August statement = spent %d, pending %d; want 0 and 5000", r.DespesasCentavos, r.APagarCentavos)
+	}
+
+	// Paid on September 5th: spent in September, no longer pending in August.
+	pago, err := fatura.Pagar(agosto, dia(2026, time.September, 5), 5000, dia(2026, time.December, 31))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pagas := []fatura.Pagamento{pago}
+	if r, _ := resumo.Mensal(agosto, credito, pagas, fechamento); r.DespesasCentavos != 0 || r.APagarCentavos != 0 {
+		t.Errorf("paid August statement, viewed in August = spent %d, pending %d; want 0 and 0",
+			r.DespesasCentavos, r.APagarCentavos)
+	}
+	r, _ := resumo.Mensal(setembro, credito, pagas, fechamento)
+	if r.DespesasCentavos != 5000 || len(r.Categorias) != 1 || r.Categorias[0].Categoria != dominio.Lazer {
+		t.Errorf("September = spent %d, categories %+v; want 5000 under lazer", r.DespesasCentavos, r.Categorias)
 	}
 }
 
@@ -115,7 +154,7 @@ func TestMensal_ReceitaIgnoraFatura(t *testing.T) {
 	ls := []dominio.Lancamento{{Centavos: 350000, Tipo: dominio.Receita,
 		Data: dia(2026, time.July, 29), Forma: dominio.Credito, Parcelas: 3}}
 
-	got, err := resumo.Mensal(comp(2026, time.July), ls, fechamento)
+	got, err := resumo.Mensal(comp(2026, time.July), ls, nil, fechamento)
 	if err != nil {
 		t.Fatalf("Mensal returned unexpected error: %v", err)
 	}
@@ -128,7 +167,7 @@ func TestMensal_PropagaErroDeFatura(t *testing.T) {
 	ls := []dominio.Lancamento{{Centavos: 30000, Tipo: dominio.Despesa,
 		Data: dia(2026, time.July, 5), Forma: dominio.Credito, Parcelas: 3}}
 
-	if _, err := resumo.Mensal(comp(2026, time.July), ls, 0); !errors.Is(err, fatura.ErrDiaFechamentoInvalido) {
+	if _, err := resumo.Mensal(comp(2026, time.July), ls, nil, 0); !errors.Is(err, fatura.ErrDiaFechamentoInvalido) {
 		t.Errorf("error = %v, want ErrDiaFechamentoInvalido", err)
 	}
 }
@@ -141,16 +180,19 @@ func TestMensal_CategoriasSomamODespesas(t *testing.T) {
 		comp(2026, time.June), comp(2026, time.July), comp(2026, time.August),
 		comp(2026, time.September), comp(2026, time.November),
 	} {
-		r, err := resumo.Mensal(mes, lancamentos(), fechamento)
-		if err != nil {
-			t.Fatalf("%v: unexpected error: %v", mes, err)
-		}
-		var soma int64
-		for _, c := range r.Categorias {
-			soma += c.Centavos
-		}
-		if soma != r.DespesasCentavos {
-			t.Errorf("%v: categories add up to %d, expenses total is %d", mes, soma, r.DespesasCentavos)
+		for _, pagas := range [][]fatura.Pagamento{nil, pagasNoProprioMes(t)} {
+			r, err := resumo.Mensal(mes, lancamentos(), pagas, fechamento)
+			if err != nil {
+				t.Fatalf("%v: unexpected error: %v", mes, err)
+			}
+			var soma int64
+			for _, c := range r.Categorias {
+				soma += c.Centavos
+			}
+			if soma != r.DespesasCentavos {
+				t.Errorf("%v (%d paid statements): categories add up to %d, expenses total is %d",
+					mes, len(pagas), soma, r.DespesasCentavos)
+			}
 		}
 	}
 }
@@ -158,7 +200,7 @@ func TestMensal_CategoriasSomamODespesas(t *testing.T) {
 func TestMensal_CategoriasDoMes(t *testing.T) {
 	// July: groceries 120 (debit) + first installment of the home purchase (100).
 	// The leisure purchase on the 28th belongs to August's statement.
-	r, err := resumo.Mensal(comp(2026, time.July), lancamentos(), fechamento)
+	r, err := resumo.Mensal(comp(2026, time.July), lancamentos(), pagasNoProprioMes(t), fechamento)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -182,7 +224,7 @@ func TestMensal_CategoriasEmpateOrdemEstavel(t *testing.T) {
 			Data: dia(2026, time.July, 4), Forma: dominio.Pix, Parcelas: 1},
 	}
 
-	r, err := resumo.Mensal(comp(2026, time.July), ls, fechamento)
+	r, err := resumo.Mensal(comp(2026, time.July), ls, nil, fechamento)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -193,7 +235,7 @@ func TestMensal_CategoriasEmpateOrdemEstavel(t *testing.T) {
 }
 
 func TestMensal_MesSemDespesasNaoTemCategorias(t *testing.T) {
-	r, _ := resumo.Mensal(comp(2026, time.November), lancamentos(), fechamento)
+	r, _ := resumo.Mensal(comp(2026, time.November), lancamentos(), nil, fechamento)
 	if len(r.Categorias) != 0 {
 		t.Errorf("Categorias = %+v, want empty", r.Categorias)
 	}
@@ -229,13 +271,13 @@ func TestMensal_Contas(t *testing.T) {
 	internet := conta(t, 10000, dominio.Casa, dia(2026, time.September, 20)) // still unpaid
 	ls := []dominio.Lancamento{luzPaga, internet}
 
-	setembro, _ := resumo.Mensal(comp(2026, time.September), ls, fechamento)
+	setembro, _ := resumo.Mensal(comp(2026, time.September), ls, nil, fechamento)
 	if setembro.DespesasCentavos != 0 || setembro.APagarCentavos != 10000 {
 		t.Errorf("September: expenses %d, a pagar %d; want 0 and 10000 (only the unpaid bill is pending)",
 			setembro.DespesasCentavos, setembro.APagarCentavos)
 	}
 
-	outubro, _ := resumo.Mensal(comp(2026, time.October), ls, fechamento)
+	outubro, _ := resumo.Mensal(comp(2026, time.October), ls, nil, fechamento)
 	if outubro.DespesasCentavos != 18540 || outubro.APagarCentavos != 0 {
 		t.Errorf("October: expenses %d, a pagar %d; want 18540 (paid amount, payment month) and 0",
 			outubro.DespesasCentavos, outubro.APagarCentavos)
@@ -252,7 +294,7 @@ func TestMensal_Contas(t *testing.T) {
 // its old behavior: spent on its date, for its amount, never "a pagar".
 func TestMensal_LancamentoComumNaoMuda(t *testing.T) {
 	for _, mes := range []fatura.Competencia{comp(2026, time.June), comp(2026, time.July), comp(2026, time.August)} {
-		r, err := resumo.Mensal(mes, lancamentos(), fechamento)
+		r, err := resumo.Mensal(mes, lancamentos(), pagasNoProprioMes(t), fechamento)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -277,5 +319,112 @@ func TestVencidas(t *testing.T) {
 	qtd, centavos := resumo.Vencidas(ls, hoje)
 	if qtd != 2 || centavos != 23000 {
 		t.Errorf("Vencidas = %d bills, %d cents; want 2 and 23000", qtd, centavos)
+	}
+}
+
+func pagarFatura(t *testing.T, c fatura.Competencia, data time.Time, centavos int64) fatura.Pagamento {
+	t.Helper()
+	p, err := fatura.Pagar(c, data, centavos, dia(2026, time.December, 31))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// A statement paid for a different amount than its installments add up to:
+// the difference is its own category line, so the categories still add up to
+// the expenses total and nothing is hidden inside "lazer" or "casa".
+func TestMensal_AjusteDaFatura(t *testing.T) {
+	// August's statement: installment 2 of the home purchase (100) + the
+	// leisure purchase on July's closing day (200) = 300.
+	agosto := comp(2026, time.August)
+	casos := []struct {
+		nome   string
+		pago   int64
+		ajuste int64
+	}{
+		{"interest or unlogged purchase", 30500, 500},
+		{"discount or refund", 29000, -1000},
+	}
+	for _, c := range casos {
+		t.Run(c.nome, func(t *testing.T) {
+			pagas := []fatura.Pagamento{pagarFatura(t, agosto, dia(2026, time.September, 5), c.pago)}
+			r, err := resumo.Mensal(comp(2026, time.September), lancamentos(), pagas, fechamento)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if r.DespesasCentavos != c.pago {
+				t.Errorf("expenses = %d, want %d (what was paid)", r.DespesasCentavos, c.pago)
+			}
+			var ajuste, soma int64
+			for _, tc := range r.Categorias {
+				soma += tc.Centavos
+				if tc.Categoria == dominio.AjusteFatura {
+					ajuste = tc.Centavos
+				}
+			}
+			if ajuste != c.ajuste || soma != r.DespesasCentavos {
+				t.Errorf("ajuste = %d (want %d), categories add up to %d (want %d)",
+					ajuste, c.ajuste, soma, r.DespesasCentavos)
+			}
+		})
+	}
+
+	// Paid exactly: no adjustment line at all.
+	pagas := []fatura.Pagamento{pagarFatura(t, agosto, dia(2026, time.September, 5), 30000)}
+	r, _ := resumo.Mensal(comp(2026, time.September), lancamentos(), pagas, fechamento)
+	for _, tc := range r.Categorias {
+		if tc.Categoria == dominio.AjusteFatura {
+			t.Errorf("exact payment produced an adjustment line: %+v", r.Categorias)
+		}
+	}
+}
+
+// A payment whose statement has no installments any more (the purchases were
+// deleted after paying) still left the pocket: all of it is adjustment, in the
+// payment month. Dropping it would make money vanish from the dashboard.
+func TestMensal_PagamentoSemParcelas(t *testing.T) {
+	pagas := []fatura.Pagamento{pagarFatura(t, comp(2026, time.March), dia(2026, time.April, 2), 7000)}
+	r, err := resumo.Mensal(comp(2026, time.April), nil, pagas, fechamento)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []resumo.TotalCategoria{{Categoria: dominio.AjusteFatura, Centavos: 7000}}
+	if r.DespesasCentavos != 7000 || !slices.Equal(r.Categorias, want) {
+		t.Errorf("expenses %d, categories %+v; want 7000 all as ajuste_fatura", r.DespesasCentavos, r.Categorias)
+	}
+}
+
+func TestFaturas(t *testing.T) {
+	julho, agosto, setembro, marco := comp(2026, time.July), comp(2026, time.August),
+		comp(2026, time.September), comp(2026, time.March)
+	pagoJulho := pagarFatura(t, julho, dia(2026, time.August, 5), 10000)
+	orfao := pagarFatura(t, marco, dia(2026, time.April, 2), 7000)
+
+	got, err := resumo.Faturas(lancamentos(), []fatura.Pagamento{pagoJulho, orfao}, fechamento)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []resumo.Fatura{
+		{Competencia: setembro, Centavos: 10000},
+		{Competencia: agosto, Centavos: 30000},
+		{Competencia: julho, Centavos: 10000, Pagamento: &pagoJulho},
+		// Listed even with no installments: otherwise its payment could never
+		// be seen or undone, while still counting as an expense.
+		{Competencia: marco, Centavos: 0, Pagamento: &orfao},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("Faturas = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		g, w := got[i], want[i]
+		if g.Competencia != w.Competencia || g.Centavos != w.Centavos || (g.Pagamento == nil) != (w.Pagamento == nil) ||
+			(g.Pagamento != nil && *g.Pagamento != *w.Pagamento) {
+			t.Errorf("Faturas[%d] = %+v, want %+v (newest first)", i, g, w)
+		}
+	}
+
+	if _, err := resumo.Faturas(lancamentos(), nil, 0); !errors.Is(err, fatura.ErrDiaFechamentoInvalido) {
+		t.Errorf("error = %v, want ErrDiaFechamentoInvalido", err)
 	}
 }

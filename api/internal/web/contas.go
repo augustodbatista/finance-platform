@@ -13,34 +13,13 @@ import (
 // pagar records the payment of a bill: POST /api/lancamentos/{id}/pagamento
 // with {"data": "YYYY-MM-DD", "valor": "185,40"}. Paying again corrects the
 // payment.
-//
-// The amount goes through parser.Valor, the same pt-BR reading the entry text
-// went through, so "185,40" means the same thing in both places.
 func (s *servidor) pagar(w http.ResponseWriter, r *http.Request) {
 	id, ok := idDaRota(w, r)
 	if !ok {
 		return
 	}
-	var corpo struct {
-		Data  string `json:"data"`
-		Valor string `json:"valor"`
-	}
-	if !lerJSON(w, r, &corpo) {
-		return
-	}
-
-	data, err := time.ParseInLocation(time.DateOnly, corpo.Data, s.Agora().Location())
-	if err != nil {
-		falhar(w, http.StatusBadRequest, "Data de pagamento inválida.")
-		return
-	}
-	centavos, err := parser.Valor(corpo.Valor)
-	if errors.Is(err, parser.ErrSemValor) {
-		falhar(w, http.StatusBadRequest, "Informe o valor pago, por exemplo 185,40.")
-		return
-	}
-	if err != nil {
-		falhar(w, http.StatusBadRequest, mensagem(err))
+	data, centavos, ok := s.lerPagamento(w, r)
+	if !ok {
 		return
 	}
 
@@ -48,6 +27,38 @@ func (s *servidor) pagar(w http.ResponseWriter, r *http.Request) {
 		return l.Pagar(data, centavos, s.Agora())
 	})
 	s.responderAlteracao(w, reg, err)
+}
+
+// lerPagamento reads {"data": "YYYY-MM-DD", "valor": "185,40"}, the body of
+// every payment (bills and statements). On failure it answers 400 and returns
+// false.
+//
+// The amount goes through parser.Valor, the same pt-BR reading the entry text
+// went through, so "185,40" means the same thing in both places. It also
+// refuses zero and negative amounts.
+func (s *servidor) lerPagamento(w http.ResponseWriter, r *http.Request) (time.Time, int64, bool) {
+	var corpo struct {
+		Data  string `json:"data"`
+		Valor string `json:"valor"`
+	}
+	if !lerJSON(w, r, &corpo) {
+		return time.Time{}, 0, false
+	}
+	data, err := time.ParseInLocation(time.DateOnly, corpo.Data, s.Agora().Location())
+	if err != nil {
+		falhar(w, http.StatusBadRequest, "Data de pagamento inválida.")
+		return time.Time{}, 0, false
+	}
+	centavos, err := parser.Valor(corpo.Valor)
+	if errors.Is(err, parser.ErrSemValor) {
+		falhar(w, http.StatusBadRequest, "Informe o valor pago, por exemplo 185,40.")
+		return time.Time{}, 0, false
+	}
+	if err != nil {
+		falhar(w, http.StatusBadRequest, mensagem(err))
+		return time.Time{}, 0, false
+	}
+	return data, centavos, true
 }
 
 // desfazerPagamento turns a paid bill back into a bill to pay:

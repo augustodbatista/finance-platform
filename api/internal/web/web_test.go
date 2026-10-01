@@ -162,7 +162,10 @@ func TestResumo(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &r); err != nil {
 		t.Fatalf("%v (%s)", err, w.Body)
 	}
-	if r["receitas"] != float64(350000) || r["despesas"] != float64(22000) || r["economia"] != float64(328000) {
+	// The credit installment is pending on September's statement, not spent:
+	// only paid statements are expenses.
+	if r["receitas"] != float64(350000) || r["despesas"] != float64(12000) || r["economia"] != float64(338000) ||
+		r["a_pagar"] != float64(10000) {
 		t.Errorf("September summary = %v", r)
 	}
 

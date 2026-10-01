@@ -75,6 +75,13 @@ const (
 
 	// Valid for both income and expenses.
 	Outros Categoria = "outros"
+
+	// AjusteFatura is never typed by the user and is not in the parser's word
+	// map. Package resumo uses it for the difference between what was paid for a
+	// credit card statement and the installments logged in it: interest or
+	// purchases never logged (positive), a discount or refund (negative).
+	// Without it the category breakdown would not add up to the expenses.
+	AjusteFatura Categoria = "ajuste_fatura"
 )
 
 // receitas are the categories that represent money coming in.

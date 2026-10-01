@@ -181,8 +181,8 @@ input[type="date"] {
 }
 .cat-barra { display: block; height: 100%; background: var(--despesa); }
 
-#lista { list-style: none; margin: 0; padding: 0; }
-#lista li {
+#lista, #faturas { list-style: none; margin: 0; padding: 0; }
+#lista li, #faturas li {
   display: grid;
   grid-template-columns: 1fr auto auto;
   gap: 0.25rem 0.75rem;
@@ -190,7 +190,7 @@ input[type="date"] {
   padding: 0.75rem 0;
   border-top: 1px solid var(--borda);
 }
-#lista li:first-child { border-top: 0; }
+#lista li:first-child, #faturas li:first-child { border-top: 0; }
 .texto { overflow-wrap: anywhere; }
 .meta { grid-column: 1; font-size: 0.8rem; color: var(--suave); }
 .valor { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }

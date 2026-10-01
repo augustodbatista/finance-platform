@@ -9,8 +9,10 @@
 
 You type what you would say out loud — `almoço 42,50`, `3x 1.200 curso`,
 `uber 18 ontem pix` — and it becomes a structured entry: amount, category, date,
-payment method and installments. The monthly summary knows that a credit card
-purchase counts on the statement it lands on, not on the day you bought it.
+payment method and installments. The monthly summary separates what already
+left your pocket from what is still to pay: a credit card purchase waits on its
+statement until you mark the statement as paid, and a bill waits until its due
+date passes or you pay it.
 
 <p align="center">
   <img src="docs/img/screenshot.png" alt="The app on a phone-sized screen: a single input field, the monthly summary and the latest entries" width="360">
@@ -48,7 +50,10 @@ Unknown words fall into *Outros* (other) instead of failing — asking the user
 - **Credit card statements modeled correctly.** A purchase on the closing day
   goes to the next statement; installments split with the remainder on the first
   one, and *the installments always add up to the total* — tested as an
-  invariant over 89 combinations of totals and installment counts.
+  invariant over 89 combinations of totals and installment counts. A paid
+  statement counts in the month of the payment, split by category; when the
+  amount paid differs from the purchases (interest, a discount), the difference
+  is its own line, so the categories always add up to the expenses total.
 - **A class of silent bugs found and fixed.** With the "last number wins" rule,
   `mercado 120 15/03` was being read as **R$ 0,03** — no error, just a wrong
   number. Dates and installment tokens are now stripped *before* the amount is
@@ -69,9 +74,9 @@ Unknown words fall into *Outros* (other) instead of failing — asking the user
 
 | | |
 |---|---|
-| Tests | 157 test cases across 54 test functions |
-| Coverage | 100% on `parser`, `fatura`, `resumo`; 98.9% `web`; 90.4% `armazem` |
-| Size | ~1,300 lines of Go + ~1,300 lines of tests + ~300 lines of HTML/CSS/JS |
+| Tests | 246 test cases across 108 test functions |
+| Coverage | 100% on `dominio`, `parser`, `fatura`, `resumo`; 99.5% `web`; 93.8% `armazem` |
+| Size | ~2,100 lines of Go + ~2,700 lines of tests + ~650 lines of HTML/CSS/JS |
 
 ## Architecture
 
@@ -96,7 +101,7 @@ api/
     ├── dominio/        Lancamento, categories, payment methods
     ├── parser/         natural-language input → Lancamento
     ├── fatura/         which statement a purchase lands on; installment split
-    ├── resumo/         income, expenses and savings for a month
+    ├── resumo/         income, expenses, savings and pending for a month
     ├── armazem/        JSON persistence
     └── web/            HTTP handlers + embedded page (static/)
 docs/decisions/         RFC-0001 (target stack) and ADR-0001 (MVP deviation)

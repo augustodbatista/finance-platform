@@ -233,13 +233,21 @@ func Dividir(total int64, parcelas int, compra time.Time, diaFechamento int) ([]
 The closing day is a parameter, not a `Cartao` entity — without persistence there
 would be nowhere to store it. The entity arrives with the database.
 
-**Consequence for the dashboard:** "expenses this month" means "installments whose
-statement is this month", not "purchases made this month". Two different numbers.
+**Statement payments (`pagamento.go`).** `Pagar(competencia, data, centavos, hoje)`
+builds a `Pagamento`; it refuses an amount <= 0 and a date after today, comparing
+calendar days (same rule as bills). `Competencia` reads and writes as `"2026-09"`
+in JSON and URLs (`String`, `ParseCompetencia`, `TextMarshaler`). Partial payment
+carried to the next statement (rotativo) is not modeled: a payment closes its
+statement. There is no due day either, so a statement is never "overdue".
+
+**Consequence for the dashboard:** a credit purchase is never spent on its
+purchase date. It is pending on its statement's month, and spent in the month
+the statement is paid. See `resumo`.
 
 ### `api/internal/resumo` — pure domain, no I/O
 
-`Mensal(mes, lancamentos, diaFechamento) (Resumo, error)` produces the dashboard
-numbers. Depends on `dominio` and `fatura`; nothing depends on it. 100% coverage.
+`Mensal(mes, lancamentos, pagas, diaFechamento) (Resumo, error)` produces the
+dashboard numbers (`pagas` = statement payments, from `armazem.FaturasPagas`). Depends on `dominio` and `fatura`; nothing depends on it. 100% coverage.
 
 The rule that justifies the package is not the sum, it is the distinction between
 two numbers that look the same:
@@ -248,16 +256,29 @@ two numbers that look the same:
 |---|---|
 | Income | month of `Data` — ignores statements and installments (a card is for spending, not receiving) |
 | Non-credit expense (debit, pix, cash, **not stated**) | month of `Data` |
-| Credit card expense | statement of **each installment** |
+| Credit card expense, statement unpaid | not an expense: `APagarCentavos` in the **statement** month (each installment on its own statement) |
+| Credit card expense, statement paid | expense in the **payment** month, by category; paid − installments → `AjusteFatura` |
 | Bill, unpaid | not an expense: `APagarCentavos` in the **due** month |
 | Bill, paid | expense in the **payment** month, for the **paid** amount |
+
+`dominio.AjusteFatura` (shown as "Ajuste da fatura") is the difference between a
+statement's payment and its installments: positive for interest or purchases
+never logged, negative for a discount or refund. It exists so the categories keep
+adding up to the total; it is not in the parser's word map. A payment for a
+statement with no installments left (purchases deleted after paying) is all
+adjustment — money that left must not vanish. Augusto's decision (2026-10-01):
+Despesas counts only what was paid; the credit entries logged before this change
+moved from Despesas to "A pagar" until their statements were marked paid.
+
+`Faturas(lancamentos, pagas, diaFechamento)` lists every statement with
+installments or a payment, newest first, including future ones.
 
 `FormaNaoInformada` counts in the month of the date: the parser does not invent a
 method, and treating the unknown as credit would postpone money that may already
 have left the account.
 
-Savings (`Economia`) go negative in a month that only has a statement to pay — that
-is information, not an error.
+Savings (`Economia`) go negative in a month where a statement is paid — that is
+information, not an error.
 
 `Categorias` breaks expenses down by category, largest first, ties by name (map
 order is random, and the screen must not reshuffle between loads). **It always adds
@@ -270,9 +291,8 @@ screen, so an overdue bill never vanishes when the summary moves on. Days are
 compared on the calendar (year, month, day), never as instants: mixing time zones
 would make a bill due today look overdue.
 
-**There is no current balance yet.** It needs an opening balance and statement
-payments modeled as entries; neither exists. It arrives with the slice that brings
-accounts and statement payments.
+**There is no current balance yet.** It needs an opening balance per account, which
+does not exist. It arrives with the slice that brings accounts.
 
 
 ### `api/internal/armazem` — JSON file persistence
@@ -280,7 +300,15 @@ accounts and statement payments.
 Stores entries in a local JSON file ([ADR-0001](docs/decisions/adr-0001-mvp-binario-go.md)).
 `Abrir` (open), `Adicionar` (add), `Listar` (list, newest first, returns a copy),
 `Remover` (remove), `Alterar` (replace an entry by what a domain function returns;
-if it errors, nothing changes and the error is passed through). Safe for concurrent use. 90.4% coverage.
+if it errors, nothing changes and the error is passed through), and statement
+payments: `FaturasPagas`, `PagarFatura` (upsert by `Competencia`),
+`DesfazerPagamentoFatura`. Safe for concurrent use. 93.8% coverage.
+
+Statement payments live in the same file, under `faturas_pagas` (omitted while
+empty, so a file with none stays byte for byte as before). **Every write copies
+the whole content** (`novo := a.dados`) before changing it: rebuilding the struct
+field by field would silently drop `faturas_pagas` on the next entry added —
+tested.
 
 Guarantees, all tested:
 
@@ -303,7 +331,10 @@ mock would be an interface with a single implementation.
 
 `Novo(Config) http.Handler`. Routes: `GET /` (page), `GET/POST /api/lancamentos`,
 `DELETE /api/lancamentos/{id}`, `POST`/`DELETE /api/lancamentos/{id}/pagamento`
-(pay a bill with `{"data","valor"}` / undo), `GET /api/resumo?mes=YYYY-MM` (totals,
+(pay a bill with `{"data","valor"}` / undo), `GET /api/faturas` (statements, newest
+first), `POST`/`DELETE /api/faturas/{YYYY-MM}/pagamento` (pay a statement / undo;
+404 for a month with no statement, so a typo cannot create an expense),
+`GET /api/resumo?mes=YYYY-MM` (totals,
 `categorias` -- always an array, never `null` --, `a_pagar` and `vencidas`, the
 latter across every month).
 
@@ -311,10 +342,11 @@ latter across every month).
 entry a bill. Each entry carries `situacao` (`""`, `a_pagar`, `vencida`, `paga`),
 computed on the server with its clock so the screen never decides by itself
 whether a bill is overdue. The paid amount goes through `parser.Valor`, the same
-pt-BR reading as entries. Every write endpoint reads its body through `lerJSON`,
+pt-BR reading as entries, in `lerPagamento`, shared by bills and statements.
+Every write endpoint reads its body through `lerJSON`,
 which carries the CSRF and body-size protections, so a new endpoint cannot forget
 them. The page (`static/`)
-is embedded in the binary. 98.9% coverage.
+is embedded in the binary. 99.5% coverage.
 
 Attack surfaces and their handling, all tested:
 
@@ -485,6 +517,10 @@ Every new gotcha goes here **before** moving on.
   JavaScript checks of the element I had clicked passed; only a screenshot of the
   whole list showed it. When checking UI state, check every item, not only the one
   you touched.
+- **The `mvp` preview answers "Failed to fetch" for the first seconds.** It runs
+  `go run`, which compiles before listening; `preview_start` returns before that.
+  Wait for "abra http://..." in the preview logs before poking the page, or the
+  first requests land on the browser's error page.
 - **Bash heredocs in the agent shell sometimes break on quotes** ("unexpected EOF
   while looking for matching `''"), especially Python or JSON with backslashes. Write
   the script or file with the editor tool and run it, instead of inlining it.

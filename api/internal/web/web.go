@@ -68,6 +68,9 @@ func Novo(c Config) http.Handler {
 	mux.HandleFunc("POST /api/lancamentos/{id}/pagamento", s.pagar)
 	mux.HandleFunc("DELETE /api/lancamentos/{id}/pagamento", s.desfazerPagamento)
 	mux.HandleFunc("GET /api/resumo", s.resumo)
+	mux.HandleFunc("GET /api/faturas", s.faturas)
+	mux.HandleFunc("POST /api/faturas/{competencia}/pagamento", s.pagarFatura)
+	mux.HandleFunc("DELETE /api/faturas/{competencia}/pagamento", s.desfazerPagamentoFatura)
 
 	return cabecalhos(autenticar(c.Senha, mux))
 }
@@ -190,13 +193,8 @@ func (s *servidor) resumo(w http.ResponseWriter, r *http.Request) {
 	}
 	mes := fatura.Competencia{Ano: ref.Year(), Mes: ref.Month()}
 
-	rs := s.Armazem.Listar()
-	ls := make([]dominio.Lancamento, len(rs))
-	for i, reg := range rs {
-		ls[i] = reg.Lancamento
-	}
-
-	res, err := resumo.Mensal(mes, ls, s.DiaFechamento)
+	ls := s.lancamentos()
+	res, err := resumo.Mensal(mes, ls, s.Armazem.FaturasPagas(), s.DiaFechamento)
 	if err != nil {
 		falhar(w, http.StatusInternalServerError, "Não consegui calcular o resumo.")
 		return
@@ -217,6 +215,16 @@ func (s *servidor) resumo(w http.ResponseWriter, r *http.Request) {
 		"a_pagar":    res.APagarCentavos,
 		"vencidas":   map[string]int64{"quantidade": int64(qtdVencidas), "centavos": centavosVencidas},
 	})
+}
+
+// lancamentos returns every stored entry, without its storage envelope.
+func (s *servidor) lancamentos() []dominio.Lancamento {
+	rs := s.Armazem.Listar()
+	ls := make([]dominio.Lancamento, len(rs))
+	for i, reg := range rs {
+		ls[i] = reg.Lancamento
+	}
+	return ls
 }
 
 type categoriaJSON struct {
@@ -245,7 +253,7 @@ func mensagem(err error) string {
 		return "Uma receita não pode ser conta a pagar."
 	case errors.Is(err, dominio.ErrNaoEConta):
 		return "Esse lançamento não é uma conta a pagar."
-	case errors.Is(err, dominio.ErrPagamentoNoFuturo):
+	case errors.Is(err, dominio.ErrPagamentoNoFuturo), errors.Is(err, fatura.ErrPagamentoNoFuturo):
 		return "A data de pagamento não pode ser no futuro."
 	default:
 		return "Não entendi esse lançamento."
