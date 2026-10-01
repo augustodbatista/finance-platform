@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/augustodbatista/finance-platform/api/internal/dominio"
 	"github.com/augustodbatista/finance-platform/api/internal/fatura"
-	"github.com/augustodbatista/finance-platform/api/internal/parser"
 	"github.com/augustodbatista/finance-platform/api/internal/resumo"
 )
 
@@ -24,21 +24,21 @@ func comp(ano int, mes time.Month) fatura.Competencia {
 // lancamentos builds the same set for every test: a month with income, a debit
 // expense, a credit card installment purchase, an entry from the previous month
 // and a purchase made on the closing day itself.
-func lancamentos() []parser.Lancamento {
-	return []parser.Lancamento{
-		{Centavos: 350000, Categoria: parser.Salario, Tipo: parser.Receita,
-			Data: dia(2026, time.July, 5), Forma: parser.Pix, Parcelas: 1},
-		{Centavos: 12000, Categoria: parser.Mercado, Tipo: parser.Despesa,
-			Data: dia(2026, time.July, 5), Forma: parser.Debito, Parcelas: 1},
+func lancamentos() []dominio.Lancamento {
+	return []dominio.Lancamento{
+		{Centavos: 350000, Categoria: dominio.Salario, Tipo: dominio.Receita,
+			Data: dia(2026, time.July, 5), Forma: dominio.Pix, Parcelas: 1},
+		{Centavos: 12000, Categoria: dominio.Mercado, Tipo: dominio.Despesa,
+			Data: dia(2026, time.July, 5), Forma: dominio.Debito, Parcelas: 1},
 		// R$ 300 in 3 credit installments: R$ 100 in July, August and September.
-		{Centavos: 30000, Categoria: parser.Casa, Tipo: parser.Despesa,
-			Data: dia(2026, time.July, 5), Forma: parser.Credito, Parcelas: 3},
+		{Centavos: 30000, Categoria: dominio.Casa, Tipo: dominio.Despesa,
+			Data: dia(2026, time.July, 5), Forma: dominio.Credito, Parcelas: 3},
 		// Previous month: must not leak into July.
-		{Centavos: 1800, Categoria: parser.Transporte, Tipo: parser.Despesa,
-			Data: dia(2026, time.June, 10), Forma: parser.Debito, Parcelas: 1},
+		{Centavos: 1800, Categoria: dominio.Transporte, Tipo: dominio.Despesa,
+			Data: dia(2026, time.June, 10), Forma: dominio.Debito, Parcelas: 1},
 		// Credit purchase on the closing day: lands in August, not July.
-		{Centavos: 20000, Categoria: parser.Lazer, Tipo: parser.Despesa,
-			Data: dia(2026, time.July, 28), Forma: parser.Credito, Parcelas: 1},
+		{Centavos: 20000, Categoria: dominio.Lazer, Tipo: dominio.Despesa,
+			Data: dia(2026, time.July, 28), Forma: dominio.Credito, Parcelas: 1},
 	}
 }
 
@@ -89,10 +89,10 @@ func TestMensal(t *testing.T) {
 func TestMensal_CreditoContaNaFaturaEDebitoNoDia(t *testing.T) {
 	compra := dia(2026, time.July, 29) // after closing day 28
 
-	debito := []parser.Lancamento{{Centavos: 5000, Tipo: parser.Despesa,
-		Data: compra, Forma: parser.Debito, Parcelas: 1}}
-	credito := []parser.Lancamento{{Centavos: 5000, Tipo: parser.Despesa,
-		Data: compra, Forma: parser.Credito, Parcelas: 1}}
+	debito := []dominio.Lancamento{{Centavos: 5000, Tipo: dominio.Despesa,
+		Data: compra, Forma: dominio.Debito, Parcelas: 1}}
+	credito := []dominio.Lancamento{{Centavos: 5000, Tipo: dominio.Despesa,
+		Data: compra, Forma: dominio.Credito, Parcelas: 1}}
 
 	julho, agosto := comp(2026, time.July), comp(2026, time.August)
 
@@ -110,8 +110,8 @@ func TestMensal_CreditoContaNaFaturaEDebitoNoDia(t *testing.T) {
 // Income does not go through statements: a salary on the 29th is July income
 // even with closing day 28. A credit card is a way of spending, not receiving.
 func TestMensal_ReceitaIgnoraFatura(t *testing.T) {
-	ls := []parser.Lancamento{{Centavos: 350000, Tipo: parser.Receita,
-		Data: dia(2026, time.July, 29), Forma: parser.Credito, Parcelas: 3}}
+	ls := []dominio.Lancamento{{Centavos: 350000, Tipo: dominio.Receita,
+		Data: dia(2026, time.July, 29), Forma: dominio.Credito, Parcelas: 3}}
 
 	got, err := resumo.Mensal(comp(2026, time.July), ls, fechamento)
 	if err != nil {
@@ -123,8 +123,8 @@ func TestMensal_ReceitaIgnoraFatura(t *testing.T) {
 }
 
 func TestMensal_PropagaErroDeFatura(t *testing.T) {
-	ls := []parser.Lancamento{{Centavos: 30000, Tipo: parser.Despesa,
-		Data: dia(2026, time.July, 5), Forma: parser.Credito, Parcelas: 3}}
+	ls := []dominio.Lancamento{{Centavos: 30000, Tipo: dominio.Despesa,
+		Data: dia(2026, time.July, 5), Forma: dominio.Credito, Parcelas: 3}}
 
 	if _, err := resumo.Mensal(comp(2026, time.July), ls, 0); !errors.Is(err, fatura.ErrDiaFechamentoInvalido) {
 		t.Errorf("error = %v, want ErrDiaFechamentoInvalido", err)
@@ -162,8 +162,8 @@ func TestMensal_CategoriasDoMes(t *testing.T) {
 	}
 
 	want := []resumo.TotalCategoria{
-		{Categoria: parser.Mercado, Centavos: 12000},
-		{Categoria: parser.Casa, Centavos: 10000},
+		{Categoria: dominio.Mercado, Centavos: 12000},
+		{Categoria: dominio.Casa, Centavos: 10000},
 	}
 	if !slices.Equal(r.Categorias, want) {
 		t.Errorf("Categorias = %+v, want %+v (largest first)", r.Categorias, want)
@@ -173,18 +173,18 @@ func TestMensal_CategoriasDoMes(t *testing.T) {
 func TestMensal_CategoriasEmpateOrdemEstavel(t *testing.T) {
 	// Same amount in two categories: order by name, so the screen never
 	// reshuffles between two loads of the same month.
-	ls := []parser.Lancamento{
-		{Centavos: 5000, Categoria: parser.Transporte, Tipo: parser.Despesa,
-			Data: dia(2026, time.July, 3), Forma: parser.Pix, Parcelas: 1},
-		{Centavos: 5000, Categoria: parser.Alimentacao, Tipo: parser.Despesa,
-			Data: dia(2026, time.July, 4), Forma: parser.Pix, Parcelas: 1},
+	ls := []dominio.Lancamento{
+		{Centavos: 5000, Categoria: dominio.Transporte, Tipo: dominio.Despesa,
+			Data: dia(2026, time.July, 3), Forma: dominio.Pix, Parcelas: 1},
+		{Centavos: 5000, Categoria: dominio.Alimentacao, Tipo: dominio.Despesa,
+			Data: dia(2026, time.July, 4), Forma: dominio.Pix, Parcelas: 1},
 	}
 
 	r, err := resumo.Mensal(comp(2026, time.July), ls, fechamento)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if r.Categorias[0].Categoria != parser.Alimentacao || r.Categorias[1].Categoria != parser.Transporte {
+	if r.Categorias[0].Categoria != dominio.Alimentacao || r.Categorias[1].Categoria != dominio.Transporte {
 		t.Errorf("tie order = %v, %v; want alimentacao before transporte",
 			r.Categorias[0].Categoria, r.Categorias[1].Categoria)
 	}

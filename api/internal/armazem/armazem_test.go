@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/augustodbatista/finance-platform/api/internal/armazem"
+	"github.com/augustodbatista/finance-platform/api/internal/dominio"
 	"github.com/augustodbatista/finance-platform/api/internal/parser"
 )
 
@@ -19,7 +20,7 @@ func caminho(t *testing.T) string {
 	return filepath.Join(t.TempDir(), "dados.json")
 }
 
-func lanc(t *testing.T, texto string) parser.Lancamento {
+func lanc(t *testing.T, texto string) dominio.Lancamento {
 	t.Helper()
 	l, err := parser.Parse(texto, agora)
 	if err != nil {

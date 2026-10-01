@@ -1,31 +1,9 @@
 package parser
 
-import "strings"
+import (
+	"strings"
 
-// Categoria is a closed set, not free text. Unrecognized input falls into
-// Outros (other) and never becomes an error: the product thesis is that
-// friction kills habit, and asking "which category?" costs more than
-// classifying wrong.
-type Categoria string
-
-const (
-	// Expenses.
-	Alimentacao Categoria = "alimentacao"
-	Mercado     Categoria = "mercado"
-	Transporte  Categoria = "transporte"
-	Casa        Categoria = "casa"
-	Saude       Categoria = "saude"
-	Lazer       Categoria = "lazer"
-	Educacao    Categoria = "educacao"
-	Assinaturas Categoria = "assinaturas"
-
-	// Income.
-	Salario       Categoria = "salario"
-	Freelancer    Categoria = "freelancer"
-	Investimentos Categoria = "investimentos"
-
-	// Valid for both income and expenses.
-	Outros Categoria = "outros"
+	"github.com/augustodbatista/finance-platform/api/internal/dominio"
 )
 
 // termos maps a typed word to a category. Keys are already normalized
@@ -35,76 +13,76 @@ const (
 // correction. If categories are often wrong in practice, the next step is edit
 // distance over these keys -- not an LLM, which would add latency and cost to
 // every entry (RFC-0001).
-var termos = map[string]Categoria{
-	"alimentacao": Alimentacao,
-	"almoco":      Alimentacao,
-	"jantar":      Alimentacao,
-	"cafe":        Alimentacao,
-	"lanche":      Alimentacao,
-	"restaurante": Alimentacao,
-	"ifood":       Alimentacao,
-	"padaria":     Alimentacao,
-	"pizza":       Alimentacao,
+var termos = map[string]dominio.Categoria{
+	"alimentacao": dominio.Alimentacao,
+	"almoco":      dominio.Alimentacao,
+	"jantar":      dominio.Alimentacao,
+	"cafe":        dominio.Alimentacao,
+	"lanche":      dominio.Alimentacao,
+	"restaurante": dominio.Alimentacao,
+	"ifood":       dominio.Alimentacao,
+	"padaria":     dominio.Alimentacao,
+	"pizza":       dominio.Alimentacao,
 
-	"mercado":      Mercado,
-	"supermercado": Mercado,
-	"feira":        Mercado,
-	"hortifruti":   Mercado,
-	"acougue":      Mercado,
+	"mercado":      dominio.Mercado,
+	"supermercado": dominio.Mercado,
+	"feira":        dominio.Mercado,
+	"hortifruti":   dominio.Mercado,
+	"acougue":      dominio.Mercado,
 
-	"transporte":     Transporte,
-	"uber":           Transporte,
-	"taxi":           Transporte,
-	"onibus":         Transporte,
-	"metro":          Transporte,
-	"gasolina":       Transporte,
-	"combustivel":    Transporte,
-	"estacionamento": Transporte,
+	"transporte":     dominio.Transporte,
+	"uber":           dominio.Transporte,
+	"taxi":           dominio.Transporte,
+	"onibus":         dominio.Transporte,
+	"metro":          dominio.Transporte,
+	"gasolina":       dominio.Transporte,
+	"combustivel":    dominio.Transporte,
+	"estacionamento": dominio.Transporte,
 
-	"casa":       Casa,
-	"aluguel":    Casa,
-	"condominio": Casa,
-	"luz":        Casa,
-	"agua":       Casa,
-	"gas":        Casa,
-	"internet":   Casa,
+	"casa":       dominio.Casa,
+	"aluguel":    dominio.Casa,
+	"condominio": dominio.Casa,
+	"luz":        dominio.Casa,
+	"agua":       dominio.Casa,
+	"gas":        dominio.Casa,
+	"internet":   dominio.Casa,
 
-	"saude":    Saude,
-	"farmacia": Saude,
-	"remedio":  Saude,
-	"medico":   Saude,
-	"dentista": Saude,
+	"saude":    dominio.Saude,
+	"farmacia": dominio.Saude,
+	"remedio":  dominio.Saude,
+	"medico":   dominio.Saude,
+	"dentista": dominio.Saude,
 
-	"lazer":  Lazer,
-	"cinema": Lazer,
-	"bar":    Lazer,
-	"show":   Lazer,
-	"viagem": Lazer,
+	"lazer":  dominio.Lazer,
+	"cinema": dominio.Lazer,
+	"bar":    dominio.Lazer,
+	"show":   dominio.Lazer,
+	"viagem": dominio.Lazer,
 
-	"educacao":    Educacao,
-	"curso":       Educacao,
-	"faculdade":   Educacao,
-	"livro":       Educacao,
-	"mensalidade": Educacao,
+	"educacao":    dominio.Educacao,
+	"curso":       dominio.Educacao,
+	"faculdade":   dominio.Educacao,
+	"livro":       dominio.Educacao,
+	"mensalidade": dominio.Educacao,
 
-	"assinaturas": Assinaturas,
-	"assinatura":  Assinaturas,
-	"netflix":     Assinaturas,
-	"spotify":     Assinaturas,
-	"disney":      Assinaturas,
-	"youtube":     Assinaturas,
-	"hbo":         Assinaturas,
+	"assinaturas": dominio.Assinaturas,
+	"assinatura":  dominio.Assinaturas,
+	"netflix":     dominio.Assinaturas,
+	"spotify":     dominio.Assinaturas,
+	"disney":      dominio.Assinaturas,
+	"youtube":     dominio.Assinaturas,
+	"hbo":         dominio.Assinaturas,
 
-	"salario":    Salario,
-	"pagamento":  Salario,
-	"freelancer": Freelancer,
-	"freela":     Freelancer,
+	"salario":    dominio.Salario,
+	"pagamento":  dominio.Salario,
+	"freelancer": dominio.Freelancer,
+	"freela":     dominio.Freelancer,
 
-	"investimentos": Investimentos,
-	"investimento":  Investimentos,
-	"dividendo":     Investimentos,
-	"rendimento":    Investimentos,
-	"juros":         Investimentos,
+	"investimentos": dominio.Investimentos,
+	"investimento":  dominio.Investimentos,
+	"dividendo":     dominio.Investimentos,
+	"rendimento":    dominio.Investimentos,
+	"juros":         dominio.Investimentos,
 }
 
 // semAcento replaces Portuguese accented letters with their base letter, so
@@ -136,31 +114,11 @@ func normalizar(s string) string {
 // No recognized word returns Outros, never an error.
 //
 // Expects normalized input (see normalizar).
-func classificar(entrada string) Categoria {
+func classificar(entrada string) dominio.Categoria {
 	for _, palavra := range strings.Fields(entrada) {
 		if c, ok := termos[palavra]; ok {
 			return c
 		}
 	}
-	return Outros
-}
-
-// receitas are the categories that represent money coming in.
-var receitas = map[Categoria]bool{
-	Salario:       true,
-	Freelancer:    true,
-	Investimentos: true,
-}
-
-// tipoDe derives income or expense from the category, so the user never has to
-// declare it: typing "salario 3500" already says everything needed.
-//
-// Outros falls into Despesa (expense). It is ambiguous by definition (it exists
-// in both lists), and the overwhelming majority of entries are money going out
-// -- the default that is wrong the least.
-func tipoDe(c Categoria) Tipo {
-	if receitas[c] {
-		return Receita
-	}
-	return Despesa
+	return dominio.Outros
 }

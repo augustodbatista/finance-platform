@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/augustodbatista/finance-platform/api/internal/armazem"
+	"github.com/augustodbatista/finance-platform/api/internal/dominio"
 	"github.com/augustodbatista/finance-platform/api/internal/fatura"
 	"github.com/augustodbatista/finance-platform/api/internal/parser"
 	"github.com/augustodbatista/finance-platform/api/internal/resumo"
@@ -162,7 +163,7 @@ func (s *servidor) resumo(w http.ResponseWriter, r *http.Request) {
 	mes := fatura.Competencia{Ano: ref.Year(), Mes: ref.Month()}
 
 	rs := s.Armazem.Listar()
-	ls := make([]parser.Lancamento, len(rs))
+	ls := make([]dominio.Lancamento, len(rs))
 	for i, reg := range rs {
 		ls[i] = reg.Lancamento
 	}

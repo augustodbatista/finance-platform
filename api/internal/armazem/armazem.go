@@ -14,7 +14,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/augustodbatista/finance-platform/api/internal/parser"
+	"github.com/augustodbatista/finance-platform/api/internal/dominio"
 )
 
 // ErrNaoEncontrado reports an ID that does not exist (or was already removed).
@@ -26,9 +26,9 @@ var ErrNaoEncontrado = errors.New("armazem: entry not found")
 // user recognizes "almoco com o time 42,50" in the list, not "Alimentacao
 // R$ 42,50".
 type Registro struct {
-	ID         int64             `json:"id"`
-	Texto      string            `json:"texto"`
-	Lancamento parser.Lancamento `json:"lancamento"`
+	ID         int64              `json:"id"`
+	Texto      string             `json:"texto"`
+	Lancamento dominio.Lancamento `json:"lancamento"`
 }
 
 type conteudo struct {
@@ -68,7 +68,7 @@ func Abrir(caminho string) (*Armazem, error) {
 }
 
 // Adicionar saves a new entry and returns the record with its ID.
-func (a *Armazem) Adicionar(texto string, l parser.Lancamento) (Registro, error) {
+func (a *Armazem) Adicionar(texto string, l dominio.Lancamento) (Registro, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 

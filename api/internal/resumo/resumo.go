@@ -15,8 +15,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/augustodbatista/finance-platform/api/internal/dominio"
 	"github.com/augustodbatista/finance-platform/api/internal/fatura"
-	"github.com/augustodbatista/finance-platform/api/internal/parser"
 )
 
 // Resumo holds the numbers for one month.
@@ -37,7 +37,7 @@ type Resumo struct {
 
 // TotalCategoria is how much of the month's expenses went to one category.
 type TotalCategoria struct {
-	Categoria parser.Categoria
+	Categoria dominio.Categoria
 	Centavos  int64
 }
 
@@ -51,26 +51,26 @@ type TotalCategoria struct {
 // (method not stated) counts in the month of the date -- the parser does not
 // invent a payment method, and treating the unknown as credit would postpone
 // money that may already have left the account.
-func Mensal(mes fatura.Competencia, lancamentos []parser.Lancamento, diaFechamento int) (Resumo, error) {
+func Mensal(mes fatura.Competencia, lancamentos []dominio.Lancamento, diaFechamento int) (Resumo, error) {
 	var r Resumo
-	porCategoria := map[parser.Categoria]int64{}
+	porCategoria := map[dominio.Categoria]int64{}
 
 	// The only place an expense is counted: the total and the per-category
 	// breakdown cannot drift apart.
-	despesa := func(c parser.Categoria, centavos int64) {
+	despesa := func(c dominio.Categoria, centavos int64) {
 		r.DespesasCentavos += centavos
 		porCategoria[c] += centavos
 	}
 
 	for _, l := range lancamentos {
-		if l.Tipo == parser.Receita {
+		if l.Tipo == dominio.Receita {
 			if noMes(l.Data, mes) {
 				r.ReceitasCentavos += l.Centavos
 			}
 			continue
 		}
 
-		if l.Forma != parser.Credito {
+		if l.Forma != dominio.Credito {
 			if noMes(l.Data, mes) {
 				despesa(l.Categoria, l.Centavos)
 			}
@@ -95,7 +95,7 @@ func Mensal(mes fatura.Competencia, lancamentos []parser.Lancamento, diaFechamen
 
 // ordenar lists categories largest first, ties by name, so the screen never
 // reshuffles between two loads of the same month (map order is random).
-func ordenar(porCategoria map[parser.Categoria]int64) []TotalCategoria {
+func ordenar(porCategoria map[dominio.Categoria]int64) []TotalCategoria {
 	out := make([]TotalCategoria, 0, len(porCategoria))
 	for c, v := range porCategoria {
 		out = append(out, TotalCategoria{Categoria: c, Centavos: v})

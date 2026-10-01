@@ -93,6 +93,7 @@ The domain packages (`parser`, `fatura`, `resumo`) are pure: no I/O, no clock
 api/
 ├── cmd/app/            entry point and configuration
 └── internal/
+    ├── dominio/        Lancamento, categories, payment methods
     ├── parser/         natural-language input → Lancamento
     ├── fatura/         which statement a purchase lands on; installment split
     ├── resumo/         income, expenses and savings for a month

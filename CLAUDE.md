@@ -83,6 +83,7 @@ triggers that reopen the decision.
 
 ```
 /api/cmd/app            → MVP binary (main + config)
+/api/internal/dominio   → Lancamento, categories, payment methods (shared types)
 /api/internal/parser    → text → entry
 /api/internal/fatura    → statements and installments
 /api/internal/resumo    → dashboard numbers
@@ -116,10 +117,17 @@ it requires a password. Tested.
 
 ## Main Packages and Models
 
+### `api/internal/dominio` — shared types, no I/O
+
+`Lancamento`, `Categoria`, `FormaPagamento`, `Tipo` and `TipoDe` (category →
+income/expense). Every other package imports these from here. They lived in
+`parser` until Oct/2026, when the "third consumer" trigger had fired and the
+entry was about to gain payment fields. 100% coverage.
+
 ### `api/internal/parser` — pure domain, no I/O
 
-`Parse(entrada string, agora time.Time) (Lancamento, error)` turns the user's
-one-line input into a structured entry. 100% coverage.
+`Parse(entrada string, agora time.Time) (dominio.Lancamento, error)` turns the
+user's one-line input into a structured entry. 100% coverage.
 
 ```go
 type Lancamento struct {
@@ -137,11 +145,11 @@ it breaks purity and makes the `"ontem"` (yesterday) test depend on the calendar
 
 | File | Responsibility |
 |---|---|
-| `parser.go` | `Parse`, `Lancamento`, `Tipo`, size limit, **pipeline order** |
+| `parser.go` | `Parse`, size limit, **pipeline order** |
 | `valor.go` | pt-BR amount → cents; range errors; `MaxEntrada` |
-| `categoria.go` | closed set, term map, `normalizar`, `tipoDe` |
+| `categoria.go` | word → category term map, `normalizar`, `classificar` |
 | `data.go` | `hoje`/`ontem`/`dd/mm[/yy[yy]]`; `ErrDataInvalida` |
-| `pagamento.go` | `FormaPagamento` and its term map |
+| `pagamento.go` | word → payment method term map |
 | `parcela.go` | `Nx` token; delegates ceiling and error to `fatura` |
 
 **The pipeline order in `Parse` is a rule, not style.** Tokens that contain digits
@@ -212,7 +220,7 @@ statement is this month", not "purchases made this month". Two different numbers
 ### `api/internal/resumo` — pure domain, no I/O
 
 `Mensal(mes, lancamentos, diaFechamento) (Resumo, error)` produces the dashboard
-numbers. Depends on `parser` and `fatura`; nothing depends on it. 100% coverage.
+numbers. Depends on `dominio` and `fatura`; nothing depends on it. 100% coverage.
 
 The rule that justifies the package is not the sum, it is the distinction between
 two numbers that look the same:
@@ -240,10 +248,6 @@ closing-day purchase. Any future rule about what counts as an expense goes there
 payments modeled as entries; neither exists. It arrives with the slice that brings
 accounts and statement payments.
 
-**Known debt:** `Lancamento` lives in `parser`, so `resumo`, `armazem` and `web`
-import the text package just for the type. The trigger recorded for moving it into
-its own domain package ("a third consumer appears") has fired; it was deferred to
-ship the MVP. Do it in the next slice that touches `Lancamento`.
 
 ### `api/internal/armazem` — JSON file persistence
 
@@ -420,10 +424,12 @@ Every new gotcha goes here **before** moving on.
   The new run takes a few seconds to register; reading results in that window makes
   an old run look current (it once led to diagnosing a failure that had already been
   fixed). Filter by commit: `gh run list --commit $(git rev-parse HEAD)`.
-- **The fields of `parser.Lancamento` are a file format.** `armazem` serializes the
+- **The fields of `dominio.Lancamento` are a file format.** `armazem` serializes the
   struct without JSON tags, so renaming a field (`Centavos` → `Valor`) makes the
   existing file load with that field zeroed — **with no error**. Renaming requires a
-  `json:"old_name"` tag or a file migration.
+  `json:"old_name"` tag or a file migration. `TestFormatoV1ContinuaLegivel` loads
+  `armazem/testdata/formato-v1.json` (real format, Sep/2026) and fails first.
+  **Adding** a field is safe: old files load it as the zero value.
 - **Run the linter locally before pushing**, because errcheck/gosec fail things that
   `go vet` lets through (it already caught an unchecked `defer os.Remove` and
   `Close`): `go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run ./...`

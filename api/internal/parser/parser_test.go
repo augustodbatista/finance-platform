@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/augustodbatista/finance-platform/api/internal/dominio"
 	"github.com/augustodbatista/finance-platform/api/internal/fatura"
 	"github.com/augustodbatista/finance-platform/api/internal/parser"
 )
@@ -112,20 +113,20 @@ func TestParse_DataInvalida(t *testing.T) {
 func TestParse_FormaPagamento(t *testing.T) {
 	casos := []struct {
 		entrada string
-		quero   parser.FormaPagamento
+		quero   dominio.FormaPagamento
 	}{
-		{"mercado 120 pix", parser.Pix},
-		{"mercado 120 dinheiro", parser.Dinheiro},
-		{"mercado 120 débito", parser.Debito},
-		{"mercado 120 debito", parser.Debito},
-		{"mercado 120 crédito", parser.Credito},
+		{"mercado 120 pix", dominio.Pix},
+		{"mercado 120 dinheiro", dominio.Dinheiro},
+		{"mercado 120 débito", dominio.Debito},
+		{"mercado 120 debito", dominio.Debito},
+		{"mercado 120 crédito", dominio.Credito},
 		// "cartao" (card) alone is ambiguous; credit is the majority reading,
 		// same logic as Outros -> Despesa: pick instead of asking.
-		{"mercado 120 cartão", parser.Credito},
+		{"mercado 120 cartão", dominio.Credito},
 		// With no mention, the parser does not invent one: applying the user's
 		// default belongs to the layer that knows user settings, not the pure
 		// domain.
-		{"mercado 120", parser.FormaNaoInformada},
+		{"mercado 120", dominio.FormaNaoInformada},
 	}
 
 	for _, c := range casos {
@@ -150,11 +151,11 @@ func TestParse_FormaNaoAtrapalhaOResto(t *testing.T) {
 	if got.Centavos != 12000 {
 		t.Errorf("Centavos = %d, want 12000", got.Centavos)
 	}
-	if got.Categoria != parser.Mercado {
-		t.Errorf("Categoria = %q, want %q", got.Categoria, parser.Mercado)
+	if got.Categoria != dominio.Mercado {
+		t.Errorf("Categoria = %q, want %q", got.Categoria, dominio.Mercado)
 	}
-	if got.Forma != parser.Debito {
-		t.Errorf("Forma = %q, want %q", got.Forma, parser.Debito)
+	if got.Forma != dominio.Debito {
+		t.Errorf("Forma = %q, want %q", got.Forma, dominio.Debito)
 	}
 }
 
@@ -198,8 +199,8 @@ func TestParse_ParcelamentoImplicaCredito(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse returned unexpected error: %v", err)
 	}
-	if got.Forma != parser.Credito {
-		t.Errorf("Forma = %q, want %q: only credit cards allow installments", got.Forma, parser.Credito)
+	if got.Forma != dominio.Credito {
+		t.Errorf("Forma = %q, want %q: only credit cards allow installments", got.Forma, dominio.Credito)
 	}
 
 	// Inference fills a gap, it does not override the user. Debit installments
@@ -209,8 +210,8 @@ func TestParse_ParcelamentoImplicaCredito(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse returned unexpected error: %v", err)
 	}
-	if got.Forma != parser.Debito {
-		t.Errorf("Forma = %q, want %q", got.Forma, parser.Debito)
+	if got.Forma != dominio.Debito {
+		t.Errorf("Forma = %q, want %q", got.Forma, dominio.Debito)
 	}
 }
 
@@ -286,8 +287,8 @@ func TestParse_SinalNegativoEIgnorado(t *testing.T) {
 	if got.Centavos != 500 {
 		t.Errorf("Centavos = %d, want 500", got.Centavos)
 	}
-	if got.Tipo != parser.Despesa {
-		t.Errorf("Tipo = %q, want %q", got.Tipo, parser.Despesa)
+	if got.Tipo != dominio.Despesa {
+		t.Errorf("Tipo = %q, want %q", got.Tipo, dominio.Despesa)
 	}
 }
 
@@ -331,20 +332,20 @@ func TestParse_Valor(t *testing.T) {
 func TestParse_Categoria(t *testing.T) {
 	casos := []struct {
 		entrada string
-		quero   parser.Categoria
+		quero   dominio.Categoria
 	}{
 		// The category's own name is a valid term.
-		{"120 mercado", parser.Mercado},
+		{"120 mercado", dominio.Mercado},
 		// A brand name maps to its category.
-		{"59 netflix", parser.Assinaturas},
-		{"Uber 18", parser.Transporte},
+		{"59 netflix", dominio.Assinaturas},
+		{"Uber 18", dominio.Transporte},
 		// Case and accents must not change the result.
-		{"ALMOÇO 10", parser.Alimentacao},
-		{"almoco 10", parser.Alimentacao},
-		{"Almoço 10", parser.Alimentacao},
+		{"ALMOÇO 10", dominio.Alimentacao},
+		{"almoco 10", dominio.Alimentacao},
+		{"Almoço 10", dominio.Alimentacao},
 		// An unknown term falls into Outros: zero friction is worth more than
 		// category precision, so this is not an error.
-		{"xyzabc 30", parser.Outros},
+		{"xyzabc 30", dominio.Outros},
 	}
 
 	for _, c := range casos {
@@ -363,17 +364,17 @@ func TestParse_Categoria(t *testing.T) {
 func TestParse_Tipo(t *testing.T) {
 	casos := []struct {
 		entrada string
-		quero   parser.Tipo
+		quero   dominio.Tipo
 	}{
-		{"120 mercado", parser.Despesa},
-		{"Uber 18", parser.Despesa},
+		{"120 mercado", dominio.Despesa},
+		{"Uber 18", dominio.Despesa},
 		// An income category defines the type; the user does not need to say.
-		{"Salário 3500", parser.Receita},
-		{"freela 800", parser.Receita},
-		{"dividendo 120", parser.Receita},
+		{"Salário 3500", dominio.Receita},
+		{"freela 800", dominio.Receita},
+		{"dividendo 120", dominio.Receita},
 		// Outros is ambiguous by nature: with no sign of income it is an
 		// expense, which is the overwhelming majority of entries.
-		{"xyzabc 30", parser.Despesa},
+		{"xyzabc 30", dominio.Despesa},
 	}
 
 	for _, c := range casos {
@@ -392,11 +393,11 @@ func TestParse_Tipo(t *testing.T) {
 func TestParse_CategoriaReceita(t *testing.T) {
 	casos := []struct {
 		entrada string
-		quero   parser.Categoria
+		quero   dominio.Categoria
 	}{
-		{"Salário 3500", parser.Salario},
-		{"freela 800", parser.Freelancer},
-		{"dividendo 120", parser.Investimentos},
+		{"Salário 3500", dominio.Salario},
+		{"freela 800", dominio.Freelancer},
+		{"dividendo 120", dominio.Investimentos},
 	}
 
 	for _, c := range casos {
