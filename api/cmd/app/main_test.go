@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -56,5 +58,29 @@ func TestCarregar_Aceitos(t *testing.T) {
 		if _, err := carregar(env(e)); err != nil {
 			t.Errorf("%v: unexpected error %v", e, err)
 		}
+	}
+}
+
+// Found running the app on a real Windows machine: the log listed six
+// "open on your phone" addresses and only one worked. The rest were
+// link-local addresses of disconnected adapters (Bluetooth, Wi-Fi) and a
+// Hyper-V virtual switch.
+func TestEnderecosParaCelular(t *testing.T) {
+	ips := []enderecoDeRede{
+		{"Ethernet", net.ParseIP("192.168.24.7"), true},
+		{"vEthernet (Default Switch)", net.ParseIP("172.23.192.1"), true},
+		{"Wi-Fi", net.ParseIP("169.254.47.200"), false},            // disconnected
+		{"Conexão Local* 9", net.ParseIP("169.254.198.196"), true}, // link-local, never routable
+		{"Loopback", net.ParseIP("127.0.0.1"), true},
+		{"Ethernet", net.ParseIP("fe80::1"), true}, // IPv6: phones type IPv4
+	}
+
+	got := enderecosParaCelular(ips, "8080")
+	want := []string{
+		"http://192.168.24.7:8080 (Ethernet)",
+		"http://172.23.192.1:8080 (vEthernet (Default Switch))",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %q\nwant %q", got, want)
 	}
 }

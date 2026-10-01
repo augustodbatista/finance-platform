@@ -126,10 +126,46 @@ func anunciar(endereco string) {
 		log.Printf("abra http://%s", endereco)
 		return
 	}
-	addrs, _ := net.InterfaceAddrs()
-	for _, a := range addrs {
-		if ipn, ok := a.(*net.IPNet); ok && ipn.IP.To4() != nil && !ipn.IP.IsLoopback() {
-			log.Printf("abra no celular: http://%s", net.JoinHostPort(ipn.IP.String(), porta))
+
+	var ips []enderecoDeRede
+	ifaces, _ := net.Interfaces()
+	for _, iface := range ifaces {
+		ativa := iface.Flags&net.FlagUp != 0 && iface.Flags&net.FlagRunning != 0
+		addrs, _ := iface.Addrs()
+		for _, a := range addrs {
+			if ipn, ok := a.(*net.IPNet); ok {
+				ips = append(ips, enderecoDeRede{iface.Name, ipn.IP, ativa})
+			}
 		}
 	}
+	for _, e := range enderecosParaCelular(ips, porta) {
+		log.Printf("abra no celular: %s", e)
+	}
+}
+
+// enderecoDeRede is one IP of one network adapter.
+type enderecoDeRede struct {
+	interfaceNome string
+	ip            net.IP
+	ativa         bool // adapter is up and connected
+}
+
+// enderecosParaCelular picks the addresses a phone on the same network could
+// actually open, labeled with their adapter so the user can tell the real
+// network card from a virtual one.
+//
+// Dropped: disconnected adapters, loopback, IPv6 (nobody types those on a
+// phone) and link-local 169.254.x.x, which Windows assigns to adapters that got
+// no address and which is never reachable. A virtual switch (Hyper-V, WSL) can
+// still appear; telling it apart would need name heuristics, so the adapter
+// name is shown instead and the user picks Ethernet or Wi-Fi.
+func enderecosParaCelular(ips []enderecoDeRede, porta string) []string {
+	var out []string
+	for _, e := range ips {
+		if !e.ativa || e.ip.To4() == nil || e.ip.IsLoopback() || e.ip.IsLinkLocalUnicast() {
+			continue
+		}
+		out = append(out, fmt.Sprintf("http://%s (%s)", net.JoinHostPort(e.ip.String(), porta), e.interfaceNome))
+	}
+	return out
 }
